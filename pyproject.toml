@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gcp_actions"
+version = "0.1.0"
+description = "Reusable Google Cloud helper functions"
+authors = [{ name = "Stanislav", email = "bike4cats@gmail.com" }]
+requires-python = ">=3.8"
+dependencies = [
+    "google-cloud-storage",
+    "google-cloud-secret-manager",
+    "python-dotenv"
+]
+
+[tool.setuptools]
+packages = ["gcp_actions"]

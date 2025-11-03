@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Any
-from gcloud_helpers.client import get_bucket
+from gcp_actions.client import get_bucket
 
 bucket = get_bucket()
 
