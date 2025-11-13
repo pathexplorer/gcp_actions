@@ -8,6 +8,13 @@ class SecretManagerClient:
     Client for managing and accessing GCP Secrets, with helpers for
     handling secrets stored as plain text which code in UTF-8 (standard usage),
     plain text without any code, and as JSON strings.
+    Usage:
+        1. Import:
+        from gcp_actions.secret_manager import SecretManagerClient
+        from gcp_actions.client import get_env_and_cashed_it
+        2. Access:
+        sm = SecretManagerClient(get_env_and_cashed_it("GCP_PROJECT_ID"))
+        access_dict = sm.get_secret_json("{name of secret}")
     """
 
     # Inject the Project_ID into the class constructor
