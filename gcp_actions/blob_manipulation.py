@@ -3,6 +3,7 @@ import json
 from typing import Any
 from gcp_actions.client import get_bucket
 import logging
+from google.api_core.exceptions import GoogleAPICallError, Forbidden
 
 # Get the root logger (which GCF has already configured)
 logger = logging.getLogger()
@@ -47,8 +48,6 @@ def upload_to_gcp_bucket(
             logging.info(f"Uploaded in GCS: {gcs_path}")
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
-
-
 
 def download_from_gcp_bucket(
         blob_name: str,
@@ -96,8 +95,44 @@ def download_from_gcp_bucket(
 
     return None
 
+def delete_blob(blob_name: str) -> bool:
+    """
+    Deletes a Google Cloud Storage blob robustly, handling existence,
+    permissions, and API errors.
+    Args:
+        blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
+    Returns:
+        True if the blob is successfully deleted or if it did not exist. False on error.
+    """
+    if not blob_name:
+        logging.warning("🟡 WARNING: Attempted to delete blob with empty name. Skipping.")
+        return True  # Treat empty name as success (nothing to delete)
 
-def delete_blob(blob_name):
     blob = bucket.blob(blob_name)
-    if blob.exists():
-        blob.delete()
+
+    try:
+        if blob.exists():
+            logging.info(f"🗑️ Attempting deletion: gs://{bucket.name}/{blob_name}")
+            blob.delete()
+            logging.info(f"✅ Deletion successful: {blob_name}")
+            return True
+        else:
+            # If the blob doesn't exist, the goal (absence) is achieved.
+            logging.info(f"🟡 Blob not found (already absent): {blob_name}")
+            return True
+
+    except Forbidden:
+        # 403 Error: Permission Issue
+        logging.error(
+            f"❌ ERROR [403 Forbidden]: Cannot delete {blob_name}. Check the service account's 'storage.objectAdmin' role.")
+        return False
+
+    except GoogleAPICallError as e:
+        # Catch general API errors (e.g., network issues, timeouts, object lock)
+        logging.error(f"❌ ERROR: GCS API call failed for {blob_name}. Details: {e}")
+        return False
+
+    except Exception as e:
+        # Catch any unexpected Python exceptions
+        logging.error(f"❌ UNEXPECTED ERROR during blob deletion for {blob_name}: {e}")
+        return False
