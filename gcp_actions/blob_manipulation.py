@@ -30,14 +30,24 @@ def upload_to_gcp_bucket(
             raise FileNotFoundError(f"Local file not found: {local_path}")
         try:
             bucket.blob(gcs_path).upload_from_filename(local_path)
+            logging.info(f"Uploaded file in GCS: {gcs_path}")
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
     if filetype == "string":
         blob = bucket.blob(gcs_path)
         try:
             blob.upload_from_string(json.dumps(local_path), content_type='application/json')
+            logging.info(f"Uploaded JSON in GCS: {gcs_path}")
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
+    if filetype == "string_path":
+        blob = bucket.blob(gcs_path)
+        try:
+            blob.upload_from_string(local_path)
+            logging.info(f"Uploaded in GCS: {gcs_path}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
+
 
 
 def download_from_gcp_bucket(
