@@ -15,6 +15,7 @@ dependencies = [
     "google-auth",
     "google-api-core",
     "python-dotenv",
+    "uuid"
 
 ]
 

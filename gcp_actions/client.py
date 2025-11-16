@@ -26,7 +26,10 @@ def get_client():
     return storage.Client()
 
 @lru_cache(maxsize=1)
-def get_bucket():
-
-    return get_client().bucket(get_env_and_cashed_it("GCS_BUCKET_NAME"))
+def get_bucket(bucket_name: str ):
+    """
+    :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
+    :return:
+    """
+    return get_client().bucket(get_env_and_cashed_it(bucket_name))
 
