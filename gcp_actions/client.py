@@ -25,11 +25,14 @@ def get_env_and_cashed_it(variable: str):
 def get_client():
     return storage.Client()
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=2)
 def get_bucket(bucket_name: str ):
     """
     :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
     :return:
     """
-    return get_client().bucket(get_env_and_cashed_it(bucket_name))
+    actual_bucket_name = get_env_and_cashed_it(bucket_name)
+    return get_client().bucket(actual_bucket_name)
+
+
 
