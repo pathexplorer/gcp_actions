@@ -4,25 +4,42 @@ from typing import Any
 from gcp_actions.client import get_bucket
 import logging
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
+import uuid
 
 # Get the root logger (which GCF has already configured)
 logger = logging.getLogger()
 # Set its level directly
 logger.setLevel(logging.DEBUG)
 
-bucket = get_bucket()
+
+def generate_unique_filename(original_filename, subcatalog: str):
+    """
+    :param original_filename:
+    :param subcatalog: set name for subcatalog
+    :return: "subcatalog/file.extension"
+    """
+    file_id = str(uuid.uuid4())
+    _, file_extension = os.path.splitext(original_filename)
+    uniq_path = f"{subcatalog}/{file_id}{file_extension}"
+    return uniq_path
+
+
+
 
 def upload_to_gcp_bucket(
+        bucket_name: str,
         gcs_path: str,
         local_path: Any | None = None,
         filetype: str = ""
-) -> None:
+) -> str | None:
     """
+    :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
     :param gcs_path: folder/filename.extension, on Storage, gs://
     :param local_path: /folder/filename, on virtual machine
     :param filetype: "filename" or "string" (json)
     :return:
     """
+    bucket = get_bucket(bucket_name)
     if not gcs_path:
         raise ValueError("GCS path must not be empty")
 
@@ -32,6 +49,16 @@ def upload_to_gcp_bucket(
         try:
             bucket.blob(gcs_path).upload_from_filename(local_path)
             logging.info(f"Uploaded file in GCS: {gcs_path}")
+            return gcs_path
+        except Exception as e:
+            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
+    if filetype == "file":
+        if not os.path.isfile(local_path):
+            raise FileNotFoundError(f"Local file not found: {local_path}")
+        try:
+            bucket.blob(gcs_path).upload_from_file(local_path)
+            logging.info(f"Uploaded file in GCS: {gcs_path}")
+            return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
     if filetype == "string":
@@ -39,6 +66,7 @@ def upload_to_gcp_bucket(
         try:
             blob.upload_from_string(json.dumps(local_path), content_type='application/json')
             logging.info(f"Uploaded JSON in GCS: {gcs_path}")
+            return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
     if filetype == "string_path":
@@ -46,20 +74,26 @@ def upload_to_gcp_bucket(
         try:
             blob.upload_from_string(local_path)
             logging.info(f"Uploaded in GCS: {gcs_path}")
+            return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
+    return None
+
 
 def download_from_gcp_bucket(
+        bucket_name: str,
         blob_name: str,
         local_path: str | None = None,
         filetype: str = ""
 ) -> bool | Any | None:
     """
+    :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
     :param blob_name: folder/filename.extension, on Storage, gs://
     :param local_path: /folder/filename, on virtual machine, ONLY for blob, not text
     :param filetype: "blob" (download_to_filename) or "text" (download_to_text).
     :return:
     """
+    bucket = get_bucket(bucket_name)
     if not blob_name:
         raise ValueError("Blob name must not be empty")
     if filetype not in ("blob", "text"):
@@ -95,15 +129,17 @@ def download_from_gcp_bucket(
 
     return None
 
-def delete_blob(blob_name: str) -> bool:
+def delete_blob(bucket_name: str, blob_name: str) -> bool:
     """
     Deletes a Google Cloud Storage blob robustly, handling existence,
     permissions, and API errors.
     Args:
+        bucket_name: GCS bucket name.
         blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
     Returns:
         True if the blob is successfully deleted or if it did not exist. False on error.
     """
+    bucket = get_bucket(bucket_name)
     if not blob_name:
         logging.warning("🟡 WARNING: Attempted to delete blob with empty name. Skipping.")
         return True  # Treat empty name as success (nothing to delete)
