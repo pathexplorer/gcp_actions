@@ -15,7 +15,8 @@ dependencies = [
     "google-auth",
     "google-api-core",
     "python-dotenv",
-    "uuid"
+    "uuid",
+    "google-cloud-pubsub"
 
 ]
 
