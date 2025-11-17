@@ -35,6 +35,6 @@ def publish_message(topic_name: str, message_data: dict):
         print(f"✅ Published message ID: {message_id}")
 
     except Exception as e:
-        print(f"🚨 Pub/Sub Publish Error: Failed to publish message to {topic_path}.")
+        print(f"   Pub/Sub Publish ERROR: Failed to publish message to {topic_path}.")
         print(f"   Data attempted: {message_data}")
         raise RuntimeError(f"Pub/Sub failed: {e}")

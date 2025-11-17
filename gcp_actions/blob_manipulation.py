@@ -19,8 +19,10 @@ def generate_unique_filename(original_filename, subcatalog: str):
     :return: "subcatalog/file.extension"
     """
     file_id = str(uuid.uuid4())
+    print(f"file_id", file_id)
     _, file_extension = os.path.splitext(original_filename)
     uniq_path = f"{subcatalog}/{file_id}{file_extension}"
+    print("uniq",uniq_path)
     return uniq_path
 
 
@@ -30,9 +32,11 @@ def upload_to_gcp_bucket(
         bucket_name: str,
         gcs_path: str,
         local_path: Any | None = None,
-        filetype: str = ""
+        filetype: str = "",
+        content_type_set: Any | None = None
 ) -> str | None:
     """
+
     :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
     :param gcs_path: folder/filename.extension, on Storage, gs://
     :param local_path: /folder/filename, on virtual machine
@@ -42,7 +46,7 @@ def upload_to_gcp_bucket(
     bucket = get_bucket(bucket_name)
     if not gcs_path:
         raise ValueError("GCS path must not be empty")
-
+    print("Start upload to GCS")
     if filetype == "filename":
         if not os.path.isfile(local_path):
             raise FileNotFoundError(f"Local file not found: {local_path}")
@@ -72,7 +76,7 @@ def upload_to_gcp_bucket(
     if filetype == "string_path":
         blob = bucket.blob(gcs_path)
         try:
-            blob.upload_from_string(local_path)
+            blob.upload_from_string(local_path,content_type=content_type_set)
             logging.info(f"Uploaded in GCS: {gcs_path}")
             return gcs_path
         except Exception as e:
