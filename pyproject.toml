@@ -4,20 +4,36 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gcp_actions"
-version = "0.1.3"
+version = "0.1.4"
 description = "Reusable Google Cloud helper functions"
 authors = [{ name = "Stanislav", email = "bike4cats@gmail.com" }]
 requires-python = ">=3.8"
+
+# CORE DEPENDENCIES (Keep this list absolutely minimal)
+# These are installed for EVERY service that imports gcp-actions.
 dependencies = [
-    "google-cloud-storage",
-    "google-cloud-firestore",
-    "google-cloud-secret-manager",
+    # Core auth libraries are needed by all other gcp libraries
     "google-auth",
     "google-api-core",
     "python-dotenv",
-    "uuid",
-    "google-cloud-pubsub"
+    "uuid"
+]
+# -----------------------------------------------------------------
+# OPTIONAL DEPENDENCIES
+# -----------------------------------------------------------------
+# These are only installed if explicitly requested.
+[project.optional-dependencies]
+storage = ["google-cloud-storage"]
+pubsub = ["google-cloud-pubsub"]
+firestore = ["google-cloud-firestore"]
+secretmanager = ["google-cloud-secret-manager"]
 
+# Installs all dependencies for your data processing worker
+processing-worker = [
+    "gcp-actions[storage]",
+    "gcp-actions[pubsub]",
+    "gcp-actions[firestore]",
+    "gcp-actions[secretmanager]",
 ]
 
 [tool.setuptools]
