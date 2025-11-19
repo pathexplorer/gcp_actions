@@ -1,7 +1,7 @@
 import os
 import json
 from typing import Any
-from gcp_actions.client import get_bucket
+from gcp_actions.client import get_bucket, get_env_and_cashed_it
 import logging
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
 import uuid
@@ -10,7 +10,6 @@ import uuid
 logger = logging.getLogger()
 # Set its level directly
 logger.setLevel(logging.DEBUG)
-
 
 def generate_unique_filename(original_filename, subcatalog: str):
     """
@@ -25,25 +24,25 @@ def generate_unique_filename(original_filename, subcatalog: str):
     print("uniq",uniq_path)
     return uniq_path
 
-
-
-
 def upload_to_gcp_bucket(
         bucket_name: str,
         gcs_path: str,
         local_path: Any | None = None,
         filetype: str = "",
-        content_type_set: Any | None = None
+        content_type_set: str | None = None,
+        user_project: str | None = None
 ) -> str | None:
     """
-
+    :param user_project:
+    :param content_type_set:
     :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
     :param gcs_path: folder/filename.extension, on Storage, gs://
     :param local_path: /folder/filename, on virtual machine
     :param filetype: "filename" or "string" (json)
     :return:
     """
-    bucket = get_bucket(bucket_name)
+    bucket = get_bucket(bucket_name, user_project=user_project)
+    print("Use bucket:", bucket)
     if not gcs_path:
         raise ValueError("GCS path must not be empty")
     print("Start upload to GCS")
@@ -88,16 +87,20 @@ def download_from_gcp_bucket(
         bucket_name: str,
         blob_name: str,
         local_path: str | None = None,
-        filetype: str = ""
+        filetype: str = "",
+        user_project: str | None = None
 ) -> bool | Any | None:
     """
-    :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
-    :param blob_name: folder/filename.extension, on Storage, gs://
-    :param local_path: /folder/filename, on virtual machine, ONLY for blob, not text
-    :param filetype: "blob" (download_to_filename) or "text" (download_to_text).
-    :return:
+    Downloads a file from GCS, supporting Requester Pays.
+
+    :param bucket_name: An env var name (e.g., "GCS_BUCKET_NAME") or the literal bucket name.
+    :param blob_name: The full path to the blob inside the bucket.
+    :param local_path: The local path to save the file (required for 'blob' filetype).
+    :param filetype: "blob" to download to a file, or "text" to download as a string.
+    :param user_project: The project ID to bill for Requester Pays requests.
+    :return: Varies based on filetype.
     """
-    bucket = get_bucket(bucket_name)
+    bucket = get_bucket(bucket_name, user_project=user_project)
     if not blob_name:
         raise ValueError("Blob name must not be empty")
     if filetype not in ("blob", "text"):
