@@ -11,7 +11,8 @@ def publish_message(topic_name: str, message_data: dict):
         message_data: A dictionary containing the file path, email, etc.
     """
     # The Pub/Sub topic name should be prefixed with the project path for Global Services
-    project_id = os.environ.get('GCP_PROJECT_ID')  # Assuming GCP_PROJECT is set by Cloud Run
+    project_id = "local-test-project"
+    # project_id = os.environ.get('GCP_PROJECT_ID')
 
     if not project_id:
         # Fallback for local testing or if environment variable is missing
