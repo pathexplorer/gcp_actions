@@ -1,9 +1,8 @@
 from google.cloud import storage
 from functools import lru_cache
 import os
-from dotenv import load_dotenv
 
-import local_runner as lr
+from gcp_actions import local_runner as lr
 
 lr.check_cloud_or_local_run()
 

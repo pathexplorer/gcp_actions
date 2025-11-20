@@ -1,7 +1,7 @@
 import json # Added for Pub/Sub message encoding
 import os
 from google.cloud import pubsub_v1
-import local_runner as lr
+from gcp_actions import local_runner as lr
 
 lr.check_cloud_or_local_run()
 
