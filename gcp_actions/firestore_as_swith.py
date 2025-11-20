@@ -6,7 +6,7 @@ from google.cloud import firestore
 IS_LOCAL = os.environ.get("K_SERVICE") is None
 
 if IS_LOCAL: # then load .env file
-    dotenv_path = os.path.join(os.path.dirname(__file__), "/home/stas/Dropbox/projects/gcp_actions_ns/gcp_actions/local_test/gcp.env")
+    dotenv_path = os.path.join(os.path.dirname(__file__), "../local_test/gcp.env")
     load_dotenv(dotenv_path=dotenv_path, override=False)
 
 
