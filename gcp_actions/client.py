@@ -3,13 +3,9 @@ from functools import lru_cache
 import os
 from dotenv import load_dotenv
 
-IS_LOCAL = os.environ.get("K_SERVICE") is None
+import local_runner as lr
 
-if IS_LOCAL:  # then load .env file
-    dotenv_path = os.path.join(os.path.dirname(__file__), "../project_env/keys.env")
-    load_dotenv(dotenv_path=dotenv_path, override=False)
-    print("local env loaded")
-
+lr.check_cloud_or_local_run()
 
 @lru_cache(maxsize=8)
 def get_env_and_cashed_it(variable: str):

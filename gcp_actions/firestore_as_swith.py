@@ -1,5 +1,5 @@
 from google.cloud import firestore
-from service_helpers import local_runner as lr
+import local_runner as lr
 
 lr.check_cloud_or_local_run()
 
