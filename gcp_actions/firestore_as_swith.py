@@ -1,15 +1,7 @@
-from dotenv import load_dotenv
-import os
 from google.cloud import firestore
+from service_helpers import local_runner as lr
 
-
-IS_LOCAL = os.environ.get("K_SERVICE") is None
-
-if IS_LOCAL: # then load .env file
-    dotenv_path = os.path.join(os.path.dirname(__file__), "../local_test/gcp.env")
-    load_dotenv(dotenv_path=dotenv_path, override=False)
-
-
+lr.check_cloud_or_local_run()
 
 db = firestore.Client()
 
@@ -24,5 +16,6 @@ def check_swith_status():
         print("Mode is OFF. Skipping function.")
         return "testing"
 
-# val = check_swith_status()
-# print(val)
+if __name__ == "__main__":
+    val = check_swith_status()
+    print(val)
