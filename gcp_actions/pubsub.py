@@ -1,15 +1,10 @@
 import json # Added for Pub/Sub message encoding
 import os
 from google.cloud import pubsub_v1
-from dotenv import load_dotenv
+from service_helpers import local_runner as lr
 
+lr.check_cloud_or_local_run()
 
-
-IS_LOCAL = os.environ.get("K_SERVICE") is None
-
-if IS_LOCAL: # then load .env file
-    dotenv_path = os.path.join(os.path.dirname(__file__), "../local_test/gcp.env")
-    load_dotenv(dotenv_path=dotenv_path, override=False)
 
 
 def publish_message(topic_name: str, message_data: dict):
@@ -40,7 +35,7 @@ def publish_message(topic_name: str, message_data: dict):
         # Publish the message
         future = publisher.publish(topic_path, data=data_bytes)
 
-        # This line blocks until the publish is complete (useful for immediate feedback)
+        # This line blocks until the publishing is complete (useful for immediate feedback)
         message_id = future.result()
 
         print(f"✅ Published message ID: {message_id}")

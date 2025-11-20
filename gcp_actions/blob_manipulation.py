@@ -5,6 +5,9 @@ from gcp_actions.client import get_bucket, get_env_and_cashed_it
 import logging
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
 import uuid
+from service_helpers import local_runner as lr
+
+lr.check_cloud_or_local_run()
 
 # Get the root logger (which GCF has already configured)
 logger = logging.getLogger()
@@ -136,17 +139,24 @@ def download_from_gcp_bucket(
 
     return None
 
-def delete_blob(bucket_name: str, blob_name: str) -> bool:
+def delete_blob(
+        bucket_name: str,
+        blob_name: str,
+        user_project: str | None = None
+
+) -> bool:
     """
     Deletes a Google Cloud Storage blob robustly, handling existence,
     permissions, and API errors.
     Args:
-        bucket_name: GCS bucket name.
-        blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
+        :param bucket_name: GCS bucket name
+        :param blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
+        :param user_project:
     Returns:
         True if the blob is successfully deleted or if it did not exist. False on error.
+
     """
-    bucket = get_bucket(bucket_name)
+    bucket = get_bucket(bucket_name, user_project=user_project)
     if not blob_name:
         logging.warning("🟡 WARNING: Attempted to delete blob with empty name. Skipping.")
         return True  # Treat empty name as success (nothing to delete)
@@ -179,3 +189,12 @@ def delete_blob(bucket_name: str, blob_name: str) -> bool:
         # Catch any unexpected Python exceptions
         logging.error(f"❌ UNEXPECTED ERROR during blob deletion for {blob_name}: {e}")
         return False
+# -----------------------
+# Test sections
+# -----------------------
+if __name__ == "__main__":
+    bucket_test = get_bucket("GCS_BUCKET_NAME")
+    print(bucket_test)
+    for blob_test in bucket_test.list_blobs():
+        print("Files in bucket:", blob_test.name)
+

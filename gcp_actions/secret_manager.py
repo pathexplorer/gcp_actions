@@ -1,7 +1,6 @@
 from google.cloud import secretmanager
 from google.api_core.exceptions import AlreadyExists
 import json
-from json.decoder import JSONDecodeError
 
 from google.auth import impersonated_credentials
 from google.auth.transport.requests import AuthorizedSession
@@ -66,13 +65,10 @@ class SecretManagerClient:
             target_scopes=["https://www.googleapis.com/auth/cloud-platform"],
             lifetime=300  # 5 minutes is generally sufficient for a single call
         )
-
         # 3. Create an AuthorizedSession transport layer
         http_session = AuthorizedSession(impersonated_creds)
 
         return impersonated_creds, http_session
-
-
 
     def get_secret_json(self, secret_id: str) -> dict:
         """
@@ -85,7 +81,7 @@ class SecretManagerClient:
             secret_string = self.get_secret_string(secret_id)
             # Then, parse the string as JSON
             return json.loads(secret_string)
-        except JSONDecodeError as e:
+        except json.JSONDecodeError as e:
             # Raise a specific error if the content isn't valid JSON
             raise ValueError(f"Secret '{secret_id}' payload is not valid JSON: {e}")
 
@@ -93,7 +89,6 @@ class SecretManagerClient:
         """
         Adds a new secret version from a Python dictionary.
         The dictionary will be converted to a JSON string.
-
         :param secret_id: The ID of the secret to update.
         :param new_data_dict: The Python dictionary to store.
         """
@@ -105,14 +100,12 @@ class SecretManagerClient:
         self.update_secret_string(secret_id, json_string)
         print(f"Secret '{secret_id}' updated with new JSON version.")
 
-
     def get_secret_string(self, secret_id: str, version_id="latest", utf_coding: str = 'yes'):
         """Get secret from GCP API
         :param secret_id: "your-secret-id"
         :param version_id: GCP version ID
         :param utf_coding: yes (is string UTF-8) or no (raw bytes, as sample session file)
         """
-
         name = f"projects/{self.project_id}/secrets/{secret_id}/versions/{version_id}"
         response = self.secret_client.access_secret_version(request={"name": name})
         data = response.payload.data
@@ -125,8 +118,6 @@ class SecretManagerClient:
             return data  # Return raw bytes
         else:
             raise ValueError(f"Invalid 'utf_coding' value: {utf_coding}")
-
-
 
     def update_secret_string(self, secret_id: str, new_value):
         parent = f"projects/{self.project_id}/secrets/{secret_id}"
