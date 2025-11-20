@@ -5,7 +5,7 @@ from gcp_actions.client import get_bucket, get_env_and_cashed_it
 import logging
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
 import uuid
-import local_runner as lr
+from gcp_actions import local_runner as lr
 
 lr.check_cloud_or_local_run()
 
