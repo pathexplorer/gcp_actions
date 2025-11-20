@@ -1,4 +1,6 @@
 from google.cloud import storage
+from google.auth import impersonated_credentials
+from google.auth import default as default_credentials
 from functools import lru_cache
 import os
 
@@ -19,32 +21,43 @@ def get_env_and_cashed_it(variable: str):
 
 
 @lru_cache(maxsize=8)
-def get_client():
-    return storage.Client()
-
-
-@lru_cache(maxsize=8)  # Increased cache for different project/bucket combos
-def get_bucket(bucket_name: str, user_project: str | None = None):
+def get_client(target_principal: str | None = None):
     """
-    Gets a bucket handle, supporting Requester Pays.
-    It first tries to resolve bucket_name as an environment variable.
-    If that fails, it assumes bucket_name is the literal name.
+    Creates a GCS client. If a target_principal (service account email) is provided,
+    the client will be configured to impersonate that service account.
+    This is necessary for signing URLs.
+    """
+    # Get the default credentials of the environment (e.g., the Cloud Run service's identity)
+    creds, project = default_credentials()
 
-    :param bucket_name: An env var name (e.g., "GCS_BUCKET_NAME") or the literal bucket name.
-    :param user_project: The project ID to bill for Requester Pays requests.
-    :return: A Google Cloud Storage Bucket object.
+    if target_principal:
+        print(f"DEBUG: Creating client with impersonation for: {target_principal}")
+        # Create new credentials by impersonating the target service account
+        creds = impersonated_credentials.Credentials(
+            source_credentials=creds,
+            target_principal=target_principal,
+            target_scopes=["https://www.googleapis.com/auth/devstorage.full_control"],
+        )
+
+    return storage.Client(credentials=creds)
+
+
+@lru_cache(maxsize=8)
+def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa: str | None = None):
+    """
+    Gets a bucket handle, supporting Requester Pays and impersonation.
     """
     # Try to get the bucket name from an environment variable.
-    # os.getenv() returns None if the variable doesn't exist.
     actual_bucket_name = os.getenv(bucket_name)
 
-    # If the environment variable wasn't found, assume the provided
-    # bucket_name is the actual name.
+    # If the environment variable wasn't found, assume the provided name is the actual name.
     if not actual_bucket_name:
         actual_bucket_name = bucket_name
 
     if not actual_bucket_name:
-        # This would only happen if an empty string was passed in.
         raise ValueError("The bucket name cannot be empty.")
 
-    return get_client().bucket(actual_bucket_name, user_project=user_project)
+    # Get a client, potentially with impersonation
+    client = get_client(target_principal=impersonate_sa)
+    
+    return client.bucket(actual_bucket_name, user_project=user_project)
