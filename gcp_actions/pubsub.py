@@ -1,6 +1,16 @@
 import json # Added for Pub/Sub message encoding
 import os
 from google.cloud import pubsub_v1
+from dotenv import load_dotenv
+
+
+
+IS_LOCAL = os.environ.get("K_SERVICE") is None
+
+if IS_LOCAL: # then load .env file
+    dotenv_path = os.path.join(os.path.dirname(__file__), "../local_test/gcp.env")
+    load_dotenv(dotenv_path=dotenv_path, override=False)
+
 
 def publish_message(topic_name: str, message_data: dict):
     """
@@ -11,13 +21,13 @@ def publish_message(topic_name: str, message_data: dict):
         message_data: A dictionary containing the file path, email, etc.
     """
     # The Pub/Sub topic name should be prefixed with the project path for Global Services
-    project_id = "local-test-project"
-    # project_id = os.environ.get('GCP_PROJECT_ID')
+
+    project_id = os.environ.get('GCP_PROJECT_ID')
 
     if not project_id:
         # Fallback for local testing or if environment variable is missing
         print("Warning: GCP_PROJECT environment variable not found. Using 'your-gcp-project-id'.")
-        project_id = 'your-gcp-project-id'
+
 
     publisher = pubsub_v1.PublisherClient()
     topic_path = publisher.topic_path(project_id, topic_name)
