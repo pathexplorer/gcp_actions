@@ -7,7 +7,7 @@ from google.api_core.exceptions import GoogleAPICallError, Forbidden
 import uuid
 from gcp_actions import local_runner as lr
 
-lr.check_cloud_or_local_run()
+lr.check_cloud_or_local_run("/home/stas/Dropbox/projects/BigBikeData/keys.env")
 
 # Get the root logger (which GCF has already configured)
 logger = logging.getLogger()

@@ -6,7 +6,7 @@ import os
 
 from gcp_actions import local_runner as lr
 
-lr.check_cloud_or_local_run()
+lr.check_cloud_or_local_run("/home/stas/Dropbox/projects/BigBikeData/keys.env")
 
 @lru_cache(maxsize=8)
 def get_env_and_cashed_it(variable: str):
