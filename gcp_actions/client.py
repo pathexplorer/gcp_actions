@@ -1,63 +1,133 @@
-from google.cloud import storage
-from google.auth import impersonated_credentials
-from google.auth import default as default_credentials
+from google.cloud import storage, firestore
+from google.api_core import exceptions as google_exceptions
+from google.auth import impersonated_credentials, default as default_credentials
+from google.auth.exceptions import DefaultCredentialsError
 from functools import lru_cache
 import os
+import logging
 
-from gcp_actions import local_runner as lr
+logger = logging.getLogger(__name__)
 
-lr.check_cloud_or_local_run("/home/stas/Dropbox/projects/BigBikeData/keys.env")
-
-@lru_cache(maxsize=8)
-def get_env_and_cashed_it(variable: str):
-    """
-    Loads and caches variable from the environment
-    :param variable: "GCP_PROJECT_ID" or gcp_project_id (which == "GCP_PROJECT_ID")
-    """
-    get_variable = os.getenv(variable)
-    if not get_variable:
-        raise EnvironmentError(f"{variable} environment variable not set. Please configure your environment.")
-    return get_variable
+# This import is assumed to be correct based on the original file.
+from gcp_actions.common_utils import local_runner as lr
+lr.check_cloud_or_local_run()
 
 
 @lru_cache(maxsize=8)
-def get_client(target_principal: str | None = None):
+def get_env_and_cashed_it(variable: str) -> str:
     """
-    Creates a GCS client. If a target_principal (service account email) is provided,
-    the client will be configured to impersonate that service account.
-    This is necessary for signing URLs.
+    Loads and caches a required variable from the environment.
+
+    Args:
+        variable: The name of the environment variable (e.g., "GCP_PROJECT_ID").
+
+    Returns:
+        The value of the environment variable.
+
+    Raises:
+        ValueError: If the variable name is empty or not a string.
+        EnvironmentError: If the environment variable is not set.
     """
-    # Get the default credentials of the environment (e.g., the Cloud Run service's identity)
-    creds, project = default_credentials()
-
-    if target_principal:
-        print(f"DEBUG: Creating client with impersonation for: {target_principal}")
-        # Create new credentials by impersonating the target service account
-        creds = impersonated_credentials.Credentials(
-            source_credentials=creds,
-            target_principal=target_principal,
-            target_scopes=["https://www.googleapis.com/auth/devstorage.full_control"],
-        )
-
-    return storage.Client(credentials=creds)
-
-
-@lru_cache(maxsize=8)
-def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa: str | None = None):
-    """
-    Gets a bucket handle, supporting Requester Pays and impersonation.
-    """
-    # Try to get the bucket name from an environment variable.
-    actual_bucket_name = os.getenv(bucket_name)
-
-    # If the environment variable wasn't found, assume the provided name is the actual name.
-    if not actual_bucket_name:
-        actual_bucket_name = bucket_name
-
-    if not actual_bucket_name:
-        raise ValueError("The bucket name cannot be empty.")
-
-    # Get a client, potentially with impersonation
-    client = get_client(target_principal=impersonate_sa)
+    if not variable or not isinstance(variable, str):
+        raise ValueError("The environment variable name must be a non-empty string.")
     
-    return client.bucket(actual_bucket_name, user_project=user_project)
+    try:
+        get_variable = os.getenv(variable)
+        if get_variable is None:
+            raise EnvironmentError(f"'{variable}' environment variable not set. Please configure your environment.")
+        return get_variable
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while accessing env var '{variable}': {e}")
+        raise
+
+
+@lru_cache(maxsize=8)
+def get_any_client(client_name: str, target_principal: str | None = None):
+    """
+    Client Factory: Creates and caches a Google Cloud client, with optional impersonation.
+
+    Args:
+        client_name: The name of the client to create. Supported: "firestore", "storage".
+        target_principal: The email of the service account to impersonate.
+
+    Returns:
+        An initialized Google Cloud client instance.
+
+    Raises:
+        ValueError: If the client_name is not supported.
+        RuntimeError: If client creation fails due to credential or permission issues.
+    """
+    client_map = {"firestore": firestore.Client, "storage": storage.Client}
+    client_name_lower = client_name.lower()
+
+    if client_name_lower not in client_map:
+        raise ValueError(f"Unknown client type '{client_name}'. Supported types are: {list(client_map.keys())}")
+
+    try:
+        creds, project = default_credentials()
+
+        if target_principal:
+            logger.debug(f"Impersonating '{target_principal}' for {client_name} client.")
+            scopes = {
+                "firestore": ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/cloud-platform"],
+                "storage": ["https://www.googleapis.com/auth/devstorage.full_control"]
+            }.get(client_name_lower, ["https://www.googleapis.com/auth/cloud-platform"])
+
+            creds = impersonated_credentials.Credentials(
+                source_credentials=creds,
+                target_principal=target_principal,
+                target_scopes=scopes,
+            )
+
+        client_class = client_map[client_name_lower]
+        loaded_client = client_class(credentials=creds)
+        logger.debug(f"Successfully initialized {client_name} client.")
+        return loaded_client
+
+    except DefaultCredentialsError:
+        logger.critical("GCP authentication failed. Could not find default credentials.")
+        raise RuntimeError("GCP authentication failed. Configure credentials with 'gcloud auth application-default login'.")
+    except Exception as e:
+        logger.error(f"Failed to initialize {client_name} client: {e}. Check IAM permissions and configuration.")
+        raise RuntimeError(f"Could not create GCP client '{client_name}'.") from e
+
+
+@lru_cache(maxsize=8)
+def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa: str | None = None) -> storage.Bucket:
+    """
+    Gets a Google Cloud Storage bucket handle, supporting Requester Pays and impersonation.
+
+    Args:
+        bucket_name: The literal bucket name or an environment variable containing the name.
+        user_project: The project ID to bill for Requester Pays requests.
+        impersonate_sa: The service account to impersonate for this request.
+
+    Returns:
+        A storage.Bucket object.
+
+    Raises:
+        ValueError: If the bucket name is empty.
+        RuntimeError: If the storage client cannot be created or the bucket cannot be accessed.
+    """
+    try:
+        # If an env var with this name exists, use its value; otherwise, use the name directly.
+        actual_bucket_name = os.getenv(bucket_name, bucket_name)
+
+        if not actual_bucket_name:
+            raise ValueError("The bucket name cannot be empty.")
+
+        storage_client = get_any_client("storage", target_principal=impersonate_sa)
+        
+        # The .bucket() method does not make an API call, so it won't raise a network error here.
+        # Errors will occur when you try to perform an action on the bucket object (e.g., list_blobs).
+        bucket = storage_client.bucket(actual_bucket_name, user_project=user_project)
+        logger.debug(f"Successfully created handle for bucket '{actual_bucket_name}'.")
+        return bucket
+
+    except ValueError as e:
+        logger.error(f"Bucket name validation failed: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get bucket handle for '{bucket_name}': {e}")
+        # Re-raise to ensure the caller knows the operation failed.
+        raise RuntimeError(f"Could not get bucket handle for '{bucket_name}'.") from e

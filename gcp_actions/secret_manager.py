@@ -1,10 +1,12 @@
 from google.cloud import secretmanager
 from google.api_core.exceptions import AlreadyExists
 import json
-
 from google.auth import impersonated_credentials
 from google.auth.transport.requests import AuthorizedSession
 from google.auth import default  # To get the runtime credentials
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SecretManagerClient:
     """
@@ -37,13 +39,13 @@ class SecretManagerClient:
         self.project_id = project_id
 
         if target_sa_email:
-            print(f"Initializing client with impersonation: {target_sa_email}")
+            logger.info(f"Initializing client with impersonation: {target_sa_email}")
             credentials, transport = self._create_impersonated_credentials(target_sa_email)
             self.secret_client = secretmanager.SecretManagerServiceClient(
                 credentials=credentials
             )
         else:
-            print("Initializing client with default credentials (Cloud Run Runtime SA).")
+            logger.info("Initializing client with default credentials (Cloud Run Runtime SA).")
             # If target_sa_email is None, use the default credentials (e.g., Cloud Run SA)
             self.secret_client = secretmanager.SecretManagerServiceClient()
 
@@ -98,7 +100,7 @@ class SecretManagerClient:
 
         # Call the string update method
         self.update_secret_string(secret_id, json_string)
-        print(f"Secret '{secret_id}' updated with new JSON version.")
+        logger.info(f"Secret '{secret_id}' updated with new JSON version.")
 
     def get_secret_string(self, secret_id: str, version_id="latest", utf_coding: str = 'yes'):
         """Get secret from GCP API
@@ -141,4 +143,4 @@ class SecretManagerClient:
                 }
             )
         except AlreadyExists:
-            print(f"Secret '{secret_id}' already exists. Skipping creation.")
+            logger.warning(f"Secret '{secret_id}' already exists. Skipping creation.")

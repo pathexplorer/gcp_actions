@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gcp-actions"
-version = "0.1.12"
+version = "0.1.15"
 description = "Reusable Google Cloud helper functions"
 authors = [{ name = "Stanislav", email = "bike4cats@gmail.com" }]
 requires-python = ">=3.8"
@@ -15,8 +15,10 @@ dependencies = [
     # Core auth libraries are needed by all other gcp libraries
     "google-auth",
     "google-api-core",
+    "google-cloud-logging",
     "python-dotenv",
     "uuid"
+
 ]
 # -----------------------------------------------------------------
 # OPTIONAL DEPENDENCIES
@@ -36,5 +38,5 @@ processing-worker = [
     "gcp-actions[secretmanager]",
 ]
 
-[tool.setuptools]
-packages = ["gcp_actions"]
+[tool.setuptools.packages.find]
+where = ["."]

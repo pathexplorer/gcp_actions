@@ -1,31 +1,48 @@
-import os
-import json
-from typing import Any
-from gcp_actions.client import get_bucket, get_env_and_cashed_it
-import logging
+from gcp_actions.client import get_bucket
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
+from typing import Any
+import json
+import logging
+import os
 import uuid
-from gcp_actions import local_runner as lr
 
-lr.check_cloud_or_local_run("/home/stas/Dropbox/projects/BigBikeData/keys.env")
+logger = logging.getLogger(__name__)
 
-# Get the root logger (which GCF has already configured)
-logger = logging.getLogger()
-# Set its level directly
-logger.setLevel(logging.DEBUG)
-
-def generate_unique_filename(original_filename, subcatalog: str):
+def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
     """
-    :param original_filename:
-    :param subcatalog: set name for subcatalog
-    :return: "subcatalog/file.extension"
+    Generates a unique filename within a specified subcatalog.
+
+    Args:
+        original_filename: The original name of the file (e.g., "my_photo.jpg").
+                           Must be a non-empty string.
+        subcatalog: The subcatalog where the file will be stored (e.g., "user_uploads").
+                    Must be a non-empty string.
+
+    Returns:
+        A unique path string in the format "subcatalog/uuid4.extension".
+
+    Raises:
+        ValueError: If original_filename or subcatalog are empty or invalid.
+        Exception: For any other unexpected errors during generation.
     """
-    file_id = str(uuid.uuid4())
-    print(f"file_id", file_id)
-    _, file_extension = os.path.splitext(original_filename)
-    uniq_path = f"{subcatalog}/{file_id}{file_extension}"
-    print("uniq",uniq_path)
-    return uniq_path
+    try:
+        if not original_filename or not isinstance(original_filename, str):
+            raise ValueError("original_filename must be a non-empty string.")
+        if not subcatalog or not isinstance(subcatalog, str):
+            raise ValueError("subcatalog must be a non-empty string.")
+
+        file_id = str(uuid.uuid4())
+        _, file_extension = os.path.splitext(original_filename)
+
+        # Sanitize subcatalog to remove leading/trailing slashes for clean path construction
+        sane_subcatalog = subcatalog.strip('/')
+
+        uniq_path = f"{sane_subcatalog}/{file_id}{file_extension}"
+        logger.debug(f"Generated unique path: {uniq_path}")
+        return uniq_path
+    except Exception as e:
+        logger.error(f"Failed to generate unique filename for '{original_filename}': {e}")
+        raise
 
 def upload_to_gcp_bucket(
         bucket_name: str,
@@ -43,18 +60,20 @@ def upload_to_gcp_bucket(
     :param local_path: /folder/filename, on virtual machine
     :param filetype: "filename" or "string" (json)
     :return:
+
     """
+    # Initialization client and check bucket name
     bucket = get_bucket(bucket_name, user_project=user_project)
-    print("Use bucket:", bucket)
+
     if not gcs_path:
         raise ValueError("GCS path must not be empty")
-    print("Start upload to GCS")
+    logger.debug("Start upload to GCS")
     if filetype == "filename":
         if not os.path.isfile(local_path):
             raise FileNotFoundError(f"Local file not found: {local_path}")
         try:
             bucket.blob(gcs_path).upload_from_filename(local_path)
-            logging.info(f"Uploaded file in GCS: {gcs_path}")
+            logger.debug(f"Uploaded file in GCS: {gcs_path}")
             return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
@@ -63,7 +82,7 @@ def upload_to_gcp_bucket(
             raise FileNotFoundError(f"Local file not found: {local_path}")
         try:
             bucket.blob(gcs_path).upload_from_file(local_path)
-            logging.info(f"Uploaded file in GCS: {gcs_path}")
+            logger.debug(f"Uploaded file in GCS: {gcs_path}")
             return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
@@ -71,7 +90,7 @@ def upload_to_gcp_bucket(
         blob = bucket.blob(gcs_path)
         try:
             blob.upload_from_string(json.dumps(local_path), content_type='application/json')
-            logging.info(f"Uploaded JSON in GCS: {gcs_path}")
+            logger.debug(f"Uploaded JSON in GCS: {gcs_path}")
             return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
@@ -79,7 +98,7 @@ def upload_to_gcp_bucket(
         blob = bucket.blob(gcs_path)
         try:
             blob.upload_from_string(local_path,content_type=content_type_set)
-            logging.info(f"Uploaded in GCS: {gcs_path}")
+            logger.debug(f"Uploaded in GCS: {gcs_path}")
             return gcs_path
         except Exception as e:
             raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
@@ -113,14 +132,14 @@ def download_from_gcp_bucket(
         if filetype == "blob":
             return False
         elif filetype == "text":
-            logging.info("Create empty text blob")
+            logger.info("Create empty text blob")
             return {}
     # 2. Handling Filetypes
     if filetype == "blob":
         if not local_path:
             # Re-introduce the mandatory check for 'blob' download
             raise ValueError("Local path must not be empty for filetype 'blob'")
-        # Create folder if it doesn't exist
+        # Create a folder if it doesn't exist
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         try:
             blob.download_to_filename(local_path)
@@ -154,40 +173,43 @@ def delete_blob(
         :param user_project:
     Returns:
         True if the blob is successfully deleted or if it did not exist. False on error.
-
+    Exceptions:
+        Forbidden
+        GoogleAPICallError
+        Exception
     """
     bucket = get_bucket(bucket_name, user_project=user_project)
     if not blob_name:
-        logging.warning("🟡 WARNING: Attempted to delete blob with empty name. Skipping.")
+        logger.warning("Attempted to delete blob with empty name. Skipping.")
         return True  # Treat empty name as success (nothing to delete)
 
     blob = bucket.blob(blob_name)
 
     try:
         if blob.exists():
-            logging.info(f"🗑️ Attempting deletion: gs://{bucket.name}/{blob_name}")
+            logger.debug(f"Attempting deletion: gs://{bucket.name}/{blob_name}")
             blob.delete()
-            logging.info(f"✅ Deletion successful: {blob_name}")
+            logger.debug(f"✅ Deletion successful: {blob_name}")
             return True
         else:
             # If the blob doesn't exist, the goal (absence) is achieved.
-            logging.info(f"🟡 Blob not found (already absent): {blob_name}")
+            logger.debug(f"🟡 Blob not found (already absent): {blob_name}")
             return True
 
     except Forbidden:
         # 403 Error: Permission Issue
-        logging.error(
-            f"❌ ERROR [403 Forbidden]: Cannot delete {blob_name}. Check the service account's 'storage.objectAdmin' role.")
+        logger.error(
+            f"❌ [403 Forbidden]: Cannot delete {blob_name}. Check the service account's 'storage.objectAdmin' role.")
         return False
 
     except GoogleAPICallError as e:
         # Catch general API errors (e.g., network issues, timeouts, object lock)
-        logging.error(f"❌ ERROR: GCS API call failed for {blob_name}. Details: {e}")
+        logger.error(f"❌ GCS API call failed for {blob_name}. Details: {e}")
         return False
 
     except Exception as e:
         # Catch any unexpected Python exceptions
-        logging.error(f"❌ UNEXPECTED ERROR during blob deletion for {blob_name}: {e}")
+        logger.error(f"❌ UNEXPECTED during blob deletion for {blob_name}: {e}")
         return False
 # -----------------------
 # Test sections
@@ -197,4 +219,3 @@ if __name__ == "__main__":
     print(bucket_test)
     for blob_test in bucket_test.list_blobs():
         print("Files in bucket:", blob_test.name)
-

@@ -1,27 +1,28 @@
-import json # Added for Pub/Sub message encoding
+import json
 import os
 from google.cloud import pubsub_v1
-from gcp_actions import local_runner as lr
+from gcp_actions.common_utils import local_runner as lr
+import logging
 
-lr.check_cloud_or_local_run("/home/stas/Dropbox/projects/BigBikeData/keys.env")
+logger = logging.getLogger(__name__)
 
-
+lr.check_cloud_or_local_run()
 
 def publish_message(topic_name: str, message_data: dict):
     """
-    Publishes a message to a Pub/Sub topic to trigger backend processing.
+    Publishes a message to a Pub/Subtopic to trigger backend processing.
 
     Args:
-        topic_name: The name of the Pub/Sub topic (e.g., 'fit-file-processing-topic').
+        topic_name: The name of the PubSub topic (e.g., 'fit-file-processing-topic').
         message_data: A dictionary containing the file path, email, etc.
     """
-    # The Pub/Sub topic name should be prefixed with the project path for Global Services
+    # The PubSub topic name should be prefixed with the project path for Global Services
 
     project_id = os.environ.get('GCP_PROJECT_ID')
 
     if not project_id:
-        # Fallback for local testing or if environment variable is missing
-        print("Warning: GCP_PROJECT environment variable not found. Using 'your-gcp-project-id'.")
+        # Fallback for local testing or if the environment variable is missing
+        logger.error("GCP_PROJECT environment variable not found. Using 'your-gcp-project-id'.")
 
 
     publisher = pubsub_v1.PublisherClient()
@@ -38,9 +39,9 @@ def publish_message(topic_name: str, message_data: dict):
         # This line blocks until the publishing is complete (useful for immediate feedback)
         message_id = future.result()
 
-        print(f"✅ Published message ID: {message_id}")
+        logger.info(f"✅ Published message ID: {message_id}")
 
     except Exception as e:
-        print(f"   Pub/Sub Publish ERROR: Failed to publish message to {topic_path}.")
-        print(f"   Data attempted: {message_data}")
+        logger.error(f"Failed to publish message to {topic_path}.")
+        logger.error(f"Data attempted: {message_data}")
         raise RuntimeError(f"Pub/Sub failed: {e}")
