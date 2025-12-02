@@ -39,7 +39,7 @@ class SecretManagerClient:
         self.project_id = project_id
 
         if target_sa_email:
-            logger.info(f"Initializing client with impersonation: {target_sa_email}")
+            logger.info(f"Initializing client with impersonation: {target_sa_email[:7]}")
             credentials, transport = self._create_impersonated_credentials(target_sa_email)
             self.secret_client = secretmanager.SecretManagerServiceClient(
                 credentials=credentials
@@ -100,7 +100,7 @@ class SecretManagerClient:
 
         # Call the string update method
         self.update_secret_string(secret_id, json_string)
-        logger.info(f"Secret '{secret_id}' updated with new JSON version.")
+        logger.info(f"Secret updated with new JSON version.")
 
     def get_secret_string(self, secret_id: str, version_id="latest", utf_coding: str = 'yes'):
         """Get secret from GCP API
@@ -143,4 +143,4 @@ class SecretManagerClient:
                 }
             )
         except AlreadyExists:
-            logger.warning(f"Secret '{secret_id}' already exists. Skipping creation.")
+            logger.warning(f"Secret already exists. Skipping creation.")

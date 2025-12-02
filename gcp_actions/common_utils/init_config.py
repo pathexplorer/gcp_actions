@@ -17,7 +17,7 @@ def load_and_inject_config(list_of_secret_env_vars: list, list_of_sa_env_vars: l
     project_id = os.getenv("GCP_PROJECT_ID")
     if not project_id:
         raise EnvironmentError("GCP_PROJECT_ID not set in environment")
-    logger.info("Loading configuration from Firestore and Secret Manager...")
+    logger.debug("Loading configuration from Firestore and Secret Manager...")
 
     firestore_config = load_config_from_firestore()
     logger.info(f"📦 Loaded from Firestore: {len(firestore_config)}")
@@ -36,14 +36,14 @@ def load_and_inject_config(list_of_secret_env_vars: list, list_of_sa_env_vars: l
                 logger.warning(f"Env var '{secret_env_var}' for secret name is not set. Skipping.")
                 continue
 
-            logger.debug(f"Processing secret '{secret_name}'...")
+            logger.debug(f"Processing secret...")
             sm = SecretManagerClient(project_id, service_account_email)
             current_secret_data = sm.get_secret_json(secret_name)
 
             # Use .update() to merge the new data, not overwrite it
             if current_secret_data:
                 all_secrets_data.update(current_secret_data)
-                logger.info(f"📦 Loaded from Secret Manager {len(current_secret_data)}.")
+                logger.info(f"📦 Loaded from Secret Manager: {len(current_secret_data)} keys.")
 
     except Exception as e:
         logger.error(f"❌ Failed during secret loading: {e}", exc_info=True)
