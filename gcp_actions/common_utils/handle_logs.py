@@ -100,7 +100,10 @@ def run_handle_logs():
         console_handler.setFormatter(CustomColorFormatter())
         root_log.addHandler(console_handler)
 
-        file_handler = logging.FileHandler('my_log_file.log', mode='a')
+        # Ensure the 'logs' directory exists
+        log_dir = '../logs'
+        os.makedirs(log_dir, exist_ok=True)
+        file_handler = logging.FileHandler(os.path.join(log_dir, 'my_log_file.log'), mode='a')
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         root_log.addHandler(file_handler)
         logging.info("Local logging configured (Console + File).")

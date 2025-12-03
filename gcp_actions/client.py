@@ -1,5 +1,4 @@
 from google.cloud import storage, firestore
-from google.api_core import exceptions as google_exceptions
 from google.auth import impersonated_credentials, default as default_credentials
 from google.auth.exceptions import DefaultCredentialsError
 from functools import lru_cache
@@ -107,7 +106,7 @@ def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa
 
     Raises:
         ValueError: If the bucket name is empty.
-        RuntimeError: If the storage client cannot be created or the bucket cannot be accessed.
+        RuntimeError: If the storage client cannot be created, or the bucket cannot be accessed.
     """
     try:
         # If an env var with this name exists, use its value; otherwise, use the name directly.

@@ -11,6 +11,13 @@ check_cloud_or_local_run()
 
 
 def load_and_inject_config(list_of_secret_env_vars: list, list_of_sa_env_vars: list = None):
+    """
+    Process a list of name variables (from YAML) and load it to env. Use only at entrance point (main.py)
+    Os.environ already presents the
+    :param list_of_secret_env_vars: name of variables, which are loaded in YAML
+    :param list_of_sa_env_vars: name of service accounts if it is used separately
+    :return:
+    """
     if list_of_sa_env_vars is None:
         list_of_sa_env_vars = []
 
