@@ -1,8 +1,9 @@
 import time
 from typing import Dict, Union
-import logging
-from contextlib import contextmanager
 
+from contextlib import contextmanager
+from unittest import result
+import logging
 logger = logging.getLogger(__name__)
 
 @contextmanager
@@ -24,46 +25,6 @@ def time_stage(stage_name: str, total_times_dict: dict):
         total_times_dict[stage_name] = duration
         logger.debug(f"--- Finished {stage_name}: {duration:.3f} seconds.")
 
-# def show_table(all_stage_times, pipeline_type: str):
-#
-#     total_time = sum(all_stage_times.values())
-#
-#     # Define Column Widths
-#     # Stage Name column: 31 characters, left-aligned (<)
-#     # Duration column: 10 characters, right-aligned (>)
-#     WIDTH = 45  # Total approximate width for the line separator
-#
-#     logger.info(f"--- {pipeline_type} Pipeline Stage Durations Summary ---")
-#
-#     # 2. Log the Header Row
-#     header_line = f"{'STAGE NAME':<31} {'DURATION (s)':>10}"
-#     logger.info(header_line)
-#     logger.info("-" * WIDTH)
-#
-#     # 3. Log each stage duration
-#     percents = {}
-#     for stage, duration in all_stage_times.items():
-#         # Use f-string: <31 for left-aligning the stage name,
-#         # >10.3f for right-aligning the duration with 3 decimal places
-#         percents[stage] = duration
-#         stage_line = f"{stage:<31} {duration:>10.3f}"
-#         logger.info(stage_line)
-#
-#
-#
-#     # 4. Log the Footer Row (Total)
-#     logger.info("-" * WIDTH)
-#
-#     # The text that actually needs padding/alignment
-#     text_to_pad = f"TOTAL {pipeline_type.upper()} PIPELINE TIME"
-#
-#     # Apply padding to the text, then add the '**' on either side.
-#     # This ensures the text inside the quotes is exactly 31 characters wide.
-#     # Note: The entire final string will be longer than 31 characters.
-#     total_line = f"**{text_to_pad:<31}** {total_time:>10.3f}"
-#     logger.info(total_line)
-
-
 
 def log_duration_table(all_stage_times, pipeline_type: str) -> None:
     """
@@ -79,12 +40,12 @@ def log_duration_table(all_stage_times, pipeline_type: str) -> None:
         name_duration_dict[stage] = duration
 
     if not name_duration_dict:
-        logging.warning("The duration dictionary is empty.")
+        logger.warning("The duration dictionary is empty.")
         return
 
     if total_duration == 0:
         # Handle the edge case of zero total duration gracefully
-        logging.error("Total duration is zero. Check your input data.")
+        logger.error("Total duration is zero. Check your input data.")
         return
 
     # --- 1. Define Table Structure and Header ---
@@ -107,7 +68,7 @@ def log_duration_table(all_stage_times, pipeline_type: str) -> None:
             log_output.append(row)
 
         except TypeError as e:
-            logging.error(f"Skipping entry for '{name}'. Duration must be numeric. Error: {e}")
+            logger.error(f"Skipping entry for '{name}'. Duration must be numeric. Error: {e}")
             continue
 
     # --- 3. Add Footer and Log Total ---
@@ -120,4 +81,32 @@ def log_duration_table(all_stage_times, pipeline_type: str) -> None:
     # --- 4. Combine and Log ---
     # Join all lines with a newline character and pass to logging.info
     final_table = "\n".join(log_output)
-    logging.info(f"\n--- Duration of {pipeline_type} Pipeline Stages ---\n" + final_table)
+    logger.info(f"\n--- Duration of {pipeline_type} Pipeline Stages ---\n" + final_table)
+
+
+def run_timer(func):
+    """
+    A decorator that standardizes the timing of a function.
+    Ignore measures that are smaller than 0.01 seconds
+    """
+    def wrapper(*args, **kwargs):
+        t_start = time.time()
+        t_result = func(*args, **kwargs)
+        t_total = time.time() - t_start
+        if round(t_total, 5) > 0.01:
+            logger.debug(f"{func.__name__} took {t_total:.2f}s")
+        else:
+            logger.debug(f"{func.__name__} shorter than 0.01s")
+        return t_result
+    return wrapper
+
+if __name__ == '__main__':
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    @run_timer
+    def mult(a, b, c):
+        time.sleep(0.01)
+        return a * b * c
+    print(mult(1,6, 8585))

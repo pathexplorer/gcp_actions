@@ -92,21 +92,15 @@ def get_any_client(client_name: str, target_principal: str | None = None):
 
 
 @lru_cache(maxsize=8)
-def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa: str | None = None) -> storage.Bucket:
+def get_bucket(bucket_name: str, impersonate_sa: str | None = None) -> storage.Bucket:
     """
     Gets a Google Cloud Storage bucket handle, supporting Requester Pays and impersonation.
 
-    Args:
-        bucket_name: The literal bucket name or an environment variable containing the name.
-        user_project: The project ID to bill for Requester Pays requests.
-        impersonate_sa: The service account to impersonate for this request.
-
-    Returns:
-        A storage.Bucket object.
-
-    Raises:
-        ValueError: If the bucket name is empty.
-        RuntimeError: If the storage client cannot be created, or the bucket cannot be accessed.
+    :param bucket_name: "GCS_BUCKET_NAME" - the literal bucket name or an environment variable containing the name.
+    :param impersonate_sa: The service account to impersonate for this request.
+    :return: A storage.Bucket object.
+    :raise ValueError: If the bucket name is empty.
+    :raise RuntimeError: If the storage client cannot be created, or the bucket cannot be accessed.
     """
     try:
         # If an env var with this name exists, use its value; otherwise, use the name directly.
@@ -119,7 +113,7 @@ def get_bucket(bucket_name: str, user_project: str | None = None, impersonate_sa
         
         # The .bucket() method does not make an API call, so it won't raise a network error here.
         # Errors will occur when you try to perform an action on the bucket object (e.g., list_blobs).
-        bucket = storage_client.bucket(actual_bucket_name, user_project=user_project)
+        bucket = storage_client.bucket(actual_bucket_name)
         logger.debug(f"Successfully created handle for bucket '{actual_bucket_name}'.")
         return bucket
 

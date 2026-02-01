@@ -1,6 +1,6 @@
 from gcp_actions.client import get_bucket
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
-from typing import Any
+from typing import Any, Literal
 import json
 import logging
 import os
@@ -12,18 +12,11 @@ def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
     """
     Generates a unique filename within a specified subcatalog.
 
-    Args:
-        original_filename: The original name of the file (e.g., "my_photo.jpg").
-                           Must be a non-empty string.
-        subcatalog: The subcatalog where the file will be stored (e.g., "user_uploads").
-                    Must be a non-empty string.
-
-    Returns:
-        A unique path string in the format "subcatalog/uuid4.extension".
-
-    Raises:
-        ValueError: If original_filename or subcatalog are empty or invalid.
-        Exception: For any other unexpected errors during generation.
+    :param original_filename: The original name of the file (e.g., "my_photo.jpg").
+    :param subcatalog: The subcatalog where the file will be stored (e.g., "user_uploads").
+    :return: A unique path string in the format "subcatalog/uuid4.extension".
+    :raise ValueError: If original_filename or subcatalog are empty or invalid.
+    :raise Exception: For any other unexpected errors during generation.
     """
     try:
         if not original_filename or not isinstance(original_filename, str):
@@ -44,65 +37,75 @@ def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
         logger.error(f"Failed to generate unique filename for '{original_filename}': {e}")
         raise
 
-def upload_to_gcp_bucket(
-        bucket_name: str,
-        gcs_path: str,
-        local_path: Any | None = None,
-        filetype: str = "",
-        content_type_set: str | None = None,
+# todo rewrite module as class
+class StorageManipulations:
+    def __init__(
+            self,
+            bucket_name: str,
+            gcs_path: str,
+            local_path: Any | None = None,
+            content_type_set: str | None = None,
+    ) -> None:
+        """
+        :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
+        :param gcs_path: folder/filename.extension, on Storage, gs://
+        :param local_path: /folder/filename, on a virtual machine
+        :param content_type_set:
+        """
+        # --- Variables ---
+        self.gcs_path = gcs_path
+        self.bucket_name = bucket_name
+        self.local_path = local_path
+        self.content_type_set = content_type_set
+        # --- Assigning --
+        self.bucket = get_bucket(bucket_name)
+        self.set_blob = self.bucket.blob(self.gcs_path)
+
+    # --- Filename ---
+    def _check_filename(self):
+        if not os.path.isfile(self.local_path):
+            raise FileNotFoundError(f"Local file not found: {self.local_path}")
+    def _upload_from_file(self):
+        self._check_filename()
+        self.set_blob.upload_from_file(self.local_path)
+    def _upload_from_filename(self):
+        self._check_filename()
+        self.set_blob.upload_from_filename(self.local_path)
+
+    # --- String ---
+    def _upload_from_string(self):
+        self.set_blob.upload_from_string(self.local_path, content_type=self.content_type_set)
+
+    # --- Start upload
+    type FileType = Literal[
+        "file",
+        "filename",
+        "string"
+    ]
+    def upload_to_gcp_bucket(
+        self,
+        filetype: FileType = "",
         user_project: str | None = None
-) -> str | None:
-    """
-    :param user_project:
-    :param content_type_set:
-    :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
-    :param gcs_path: folder/filename.extension, on Storage, gs://
-    :param local_path: /folder/filename, on virtual machine
-    :param filetype: "filename" or "string" (json)
-    :return:
+    ) -> str | None:
+        """
+        :param user_project:
+        :param filetype: "filename" or "string" (json)
+        """
+        if not self.gcs_path:
+            raise ValueError("GCS path must not be empty")
+        logger.debug("Start upload to GCS")
 
-    """
-    # Initialization client and check bucket name
-    bucket = get_bucket(bucket_name, user_project=user_project)
-
-    if not gcs_path:
-        raise ValueError("GCS path must not be empty")
-    logger.debug("Start upload to GCS")
-    if filetype == "filename":
-        if not os.path.isfile(local_path):
-            raise FileNotFoundError(f"Local file not found: {local_path}")
         try:
-            bucket.blob(gcs_path).upload_from_filename(local_path)
-            logger.debug(f"Uploaded file in GCS: {gcs_path}")
-            return gcs_path
+            if filetype == "file":
+                self._upload_from_file()
+            elif filetype == "filename":
+                self._upload_from_filename()
+            elif filetype == "string":
+                self._upload_from_string()
+            logger.debug(f"Uploaded file in GCS: {self.gcs_path}")
+            return self.gcs_path
         except Exception as e:
-            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
-    if filetype == "file":
-        if not os.path.isfile(local_path):
-            raise FileNotFoundError(f"Local file not found: {local_path}")
-        try:
-            bucket.blob(gcs_path).upload_from_file(local_path)
-            logger.debug(f"Uploaded file in GCS: {gcs_path}")
-            return gcs_path
-        except Exception as e:
-            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
-    if filetype == "string":
-        blob = bucket.blob(gcs_path)
-        try:
-            blob.upload_from_string(json.dumps(local_path), content_type='application/json')
-            logger.debug(f"Uploaded JSON in GCS: {gcs_path}")
-            return gcs_path
-        except Exception as e:
-            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
-    if filetype == "string_path":
-        blob = bucket.blob(gcs_path)
-        try:
-            blob.upload_from_string(local_path,content_type=content_type_set)
-            logger.debug(f"Uploaded in GCS: {gcs_path}")
-            return gcs_path
-        except Exception as e:
-            raise RuntimeError(f"Failed to upload {local_path} to {gcs_path}: {e}")
-    return None
+            raise RuntimeError(f"Failed to upload {self.local_path} to {self.gcs_path}: {e}")
 
 
 def download_from_gcp_bucket(
@@ -122,7 +125,7 @@ def download_from_gcp_bucket(
     :param user_project: The project ID to bill for Requester Pays requests.
     :return: Varies based on filetype.
     """
-    bucket = get_bucket(bucket_name, user_project=user_project)
+    bucket = get_bucket(bucket_name)
     if not blob_name:
         raise ValueError("Blob name must not be empty")
     if filetype not in ("blob", "text"):
@@ -167,18 +170,15 @@ def delete_blob(
     """
     Deletes a Google Cloud Storage blob robustly, handling existence,
     permissions, and API errors.
-    Args:
         :param bucket_name: GCS bucket name
         :param blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
         :param user_project:
-    Returns:
-        True if the blob is successfully deleted or if it did not exist. False on error.
-    Exceptions:
-        Forbidden
-        GoogleAPICallError
-        Exception
+        :return: True if the blob is successfully deleted or if it did not exist. False on error.
+        :exception Forbidden:
+        :exception GoogleAPICallError:
+        :exception Exception:
     """
-    bucket = get_bucket(bucket_name, user_project=user_project)
+    bucket = get_bucket(bucket_name)
     if not blob_name:
         logger.warning("Attempted to delete blob with empty name. Skipping.")
         return True  # Treat empty name as success (nothing to delete)

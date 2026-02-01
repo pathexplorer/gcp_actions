@@ -5,6 +5,7 @@ from google.auth import impersonated_credentials
 from google.auth.transport.requests import AuthorizedSession
 from google.auth import default  # To get the runtime credentials
 import logging
+from gcp_actions.common_utils.timer import run_timer
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class SecretManagerClient:
     """
 
     # Inject the Project_ID into the class constructor
+    @run_timer
     def __init__(self, project_id: str, target_sa_email: str = None):
         """
         Initializes the client.
@@ -71,7 +73,6 @@ class SecretManagerClient:
         http_session = AuthorizedSession(impersonated_creds)
 
         return impersonated_creds, http_session
-
     def get_secret_json(self, secret_id: str) -> dict:
         """
         Gets the latest secret, decodes it, and parses it as JSON.
@@ -101,12 +102,12 @@ class SecretManagerClient:
         # Call the string update method
         self.update_secret_string(secret_id, json_string)
         logger.info(f"Secret updated with new JSON version.")
-
+    @run_timer
     def get_secret_string(self, secret_id: str, version_id="latest", utf_coding: str = 'yes'):
         """Get secret from GCP API
         :param secret_id: "your-secret-id"
         :param version_id: GCP version ID
-        :param utf_coding: yes (is string UTF-8) or no (raw bytes, as sample session file)
+        :param utf_coding: yes (is string UTF-8) or no (raw bytes, as a sample session file)
         """
         name = f"projects/{self.project_id}/secrets/{secret_id}/versions/{version_id}"
         response = self.secret_client.access_secret_version(request={"name": name})

@@ -5,11 +5,6 @@ import json
 import warnings
 from functools import lru_cache
 
-
-# We don't need CloudLoggingHandler anymore for Cloud Run
-# from google.cloud.logging import Client as LogClient
-# from google.cloud.logging.handlers import CloudLoggingHandler
-
 # --- 1. Formatter for Cloud (JSON) ---
 class CloudJSONFormatter(logging.Formatter):
     """
@@ -40,6 +35,7 @@ class CustomColorFormatter(logging.Formatter):
     A custom formatter that applies ANSI colors to log messages based on level.
     """
     GREEN = "\033[32m"
+    PURPURE = "\033[35m"
     YELLOW = "\033[33m"
     RED = "\033[31m"
     BOLD_RED = "\033[31;1m"
@@ -48,7 +44,7 @@ class CustomColorFormatter(logging.Formatter):
     DEFAULT_FORMAT = "%(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
 
     FORMATS = {
-        logging.DEBUG: DEFAULT_FORMAT,
+        logging.DEBUG: PURPURE + DEFAULT_FORMAT + RESET,
         logging.INFO: GREEN + DEFAULT_FORMAT + RESET,
         logging.WARNING: YELLOW + DEFAULT_FORMAT + RESET,
         logging.ERROR: RED + DEFAULT_FORMAT + RESET,
@@ -92,7 +88,7 @@ def run_handle_logs():
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(CloudJSONFormatter())
         root_log.addHandler(handler)
-        logging.info("Cloud Logging configured: JSON to stdout.")
+        logging.info(f"Cloud Logging configured: JSON to stdout, level: {log_level}.")
 
     else:
         # --- LOCAL CONFIGURATION ---
@@ -106,9 +102,10 @@ def run_handle_logs():
         file_handler = logging.FileHandler(os.path.join(log_dir, 'my_log_file.log'), mode='a')
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
         root_log.addHandler(file_handler)
-        logging.info("Local logging configured (Console + File).")
+        logging.info(f"Local logging configured (Console + File), level: {log_level}.")
 
-    # Silence noisy loggers
+
+    # Silence noisy loggers-
     for noisy_logger in ["telethon", "urllib3", "asyncio", "google.cloud", "google.auth"]:
         logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 

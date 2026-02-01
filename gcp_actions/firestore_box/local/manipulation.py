@@ -1,6 +1,7 @@
 from gcp_actions.client import get_any_client
-
+from gcp_actions.firestore_box.json_manipulations import FirestoreMagic
 def create_in_firestore():
+
     db = get_any_client("firestore")
 
     # Path: config/front-side-for-friends/settings/data
@@ -25,6 +26,10 @@ def create_in_firestore():
 
     doc_ref.set(config_data)
     print("✅ Configuration document created successfully!")
-
-if __name__ == "__main__":
-    create_in_firestore()
+#
+# if __name__ == "__main__":
+    # fs = FirestoreMagic("firestore", "telegram")
+    # data = {"test": "test"}
+    #
+    #
+    # fs.create_firejson("keywords", data)
