@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from google.cloud.firestore_v1.field_path import FieldPath
 from gcp_actions.client import get_any_client
 from google.cloud import firestore
@@ -105,6 +106,83 @@ class FirestoreMagic:
         """
         doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
         doc_ref.set(data_name, merge)
+
+    def backup_document(self, backup_collection_name: str | None = None):
+        """
+        Copy the current document to a timestamped backup document.
+        Writes to `{collection_name}_backups/{doc_name}_{ISO8601_timestamp}`.
+
+        :param backup_collection_name: override backup collection (default: {collection}_backups)
+        """
+        if backup_collection_name is None:
+            backup_collection_name = f"{self.collection_name}_backups"
+
+        # Resolve source document reference (same logic as load_firejson)
+        if "/" in self.doc_load_name:
+            full_path = os.path.join(self.collection_name, self.doc_load_name)
+            doc_ref = self.client.document(full_path)
+        else:
+            doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
+
+        doc_snapshot = doc_ref.get()
+        if not doc_snapshot.exists:
+            logger.warning("backup_document: source '%s/%s' does not exist — nothing to back up.",
+                           self.collection_name, self.doc_load_name)
+            return
+
+        data = doc_snapshot.to_dict()
+        if data is None:
+            logger.warning("backup_document: source '%s/%s' is empty — nothing to back up.",
+                           self.collection_name, self.doc_load_name)
+            return
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+        backup_doc_id = f"{self.doc_load_name}_{timestamp}"
+        backup_ref = self.client.collection(backup_collection_name).document(backup_doc_id)
+        backup_ref.set(data)
+        logger.info("Backup created: '%s/%s' (%d top-level keys).",
+                    backup_collection_name, backup_doc_id, len(data))
+
+    def prune_old_backups(self, max_backups: int = 30, backup_collection_name: str | None = None):
+        """
+        Keep only the `max_backups` most recent backup documents for this doc.
+        Deletes older backups from the backup collection.
+
+        :param max_backups: number of most recent backups to retain
+        :param backup_collection_name: override backup collection (default: {collection}_backups)
+        """
+        if backup_collection_name is None:
+            backup_collection_name = f"{self.collection_name}_backups"
+
+        prefix = f"{self.doc_load_name}_"
+        backups_ref = self.client.collection(backup_collection_name)
+
+        # Stream all docs in the backup collection and filter by ID prefix
+        try:
+            backups = [snap for snap in backups_ref.stream() if snap.id.startswith(prefix)]
+        except Exception as e:
+            logger.warning("prune_old_backups: could not list backups: %s", e)
+            return
+
+        if not backups:
+            logger.debug("prune_old_backups: no backups found with prefix '%s'.", prefix)
+            return
+
+        # Sort by document ID (contains ISO timestamp), oldest first
+        backups.sort(key=lambda snap: snap.id)
+
+        excess = len(backups) - max_backups
+        if excess <= 0:
+            logger.debug("prune_old_backups: %d backups, limit %d — nothing to prune.",
+                         len(backups), max_backups)
+            return
+
+        for snap in backups[:excess]:
+            snap.reference.delete()
+            logger.debug("Pruned old backup: '%s/%s'.", backup_collection_name, snap.id)
+
+        logger.info("prune_old_backups: deleted %d old backups, %d remain.",
+                    excess, len(backups) - excess)
 
     def update_firejson(self, data_name):
         """
