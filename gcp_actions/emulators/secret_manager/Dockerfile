@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir flask gunicorn
+RUN pip install --no-cache-dir flask
 
 COPY emulator.py .
 
@@ -15,4 +15,4 @@ RUN mkdir -p /data && chmod 777 /data
 
 EXPOSE 8083
 
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT --workers 1 --threads 4 emulator:app"]
+CMD ["python", "emulator.py"]

@@ -20,11 +20,27 @@ use SecretManagerClient in emulator mode exactly as in production.
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.request
 import urllib.error
 from pathlib import Path
-from dotenv import load_dotenv
+
+
+def _load_env_file(path: str) -> None:
+    """Parse a KEY=VALUE env file and inject into os.environ (stdlib only)."""
+    with open(path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$", line)
+            if match:
+                key, value = match.group(1), match.group(2).strip()
+                # strip optional surrounding quotes
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+                os.environ[key] = value
 
 
 # ---------------------------------------------------------------------------
@@ -94,23 +110,62 @@ def create_or_update_secret(emulator_base: str, project_id: str, secret_name: st
 # Secret → payload mapping
 # ---------------------------------------------------------------------------
 # Mirrors what production Secret Manager stores.
-#   env_var_holding_secret_name → list of env vars that make up the JSON payload
+#
+# Format: env_var_holding_secret_name → list of env vars that make up the JSON payload
+#
+# Multiple env vars can point to the SAME secret name (e.g. SEC_DROPBOX and
+# SEC_STRAVA both → "dropbox-secrets") — their payload keys are merged.
+# ---------------------------------------------------------------------------
 SECRET_CONFIG_MAP = {
+    # --- fullstack-app-json-keys (all general config) ---
     "APP_JSON_KEYS": [
-        "APP_JSON_KEYS_VALUE",
+        "GCP_PROJECT_ID",
+        "BREVO_API_KEY",
+        "SMTP_PASSWORD",
+        "SMTP_SENDER",
+        "SMTP_SERVER",
+        "SMTP_PORT",
+        "SMTP_USER",
+        "EVENTARC_SA",
+        "EVENTARC_TRIGGER",
+        "SEC_DROPBOX",
+        "S_ACCOUNT_RUN",
+        "S_ACCOUNT_DROPBOX",
+        "CLOUD_RUN_SERVICE",
+        "CLOUD_RUN_SERVICE_PUB",
+        "GCS_BUCKET_NAME",
+        "GCS_PUB_OUTPUT_BUCKET",
+        "EMAIL_MODE",
+        "STRAVA_UPLOAD",
+        "GCP_TOPIC_NAME",
+        "DROPBOX_TOPIC_NAME",
+        "COOKIE_DOMAIN",
+        "PRIVATE_ACCESS_TOKEN",
+        "PRIVATE_UPLOAD_TOKEN",
+        "FRONTEND_BASE_URL",
+        "FLASK_SECRET_KEY",
+        "DONATION_HTML_SNIPPET_MONO",
+        "DONATION_HTML_SNIPPET_PRIVAT",
+        "BACKEND_TAG",
+        "FRONTEND_TAG",
     ],
+    # --- dropbox-secrets (Dropbox + Strava + PG keys — combined secret) ---
     "SEC_DROPBOX": [
         "DROPBOX_APP_KEY",
         "DROPBOX_APP_SECRET",
         "DROPBOX_REFRESH_TOKEN",
-    ],
-    "SEC_STRAVA": [
         "STRAVA_APP_ID",
         "STRAVA_CLIENT_SECRET",
         "STRAVA_REFRESH_TOKEN",
         "STRAVA_ACCESS_TOKEN",
-        "EXPIRES_AT",
+        "STRAVA_EXPIRES_AT",
     ],
+}
+
+# Single-key secrets: env_var_holding_secret_name → env_var_holding_the_value
+# These are stored as a plain string (not wrapped in JSON).
+SINGLE_KEY_SECRETS = {
+    # Example: "FLASK_SECRET_KEY_NAME": "FLASK_SECRET_KEY_VALUE",
 }
 
 
@@ -145,7 +200,7 @@ def main() -> None:
         sys.exit(1)
 
     print(f"✅ Loading keys from: {keys_env_path}")
-    load_dotenv(dotenv_path=keys_env_path, override=True)
+    _load_env_file(keys_env_path)
 
     # Normalise emulator URL
     emulator_base = args.emulator_host

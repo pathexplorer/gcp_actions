@@ -1,82 +1,72 @@
 # Secret Manager Emulator — Local Development
 
-Replaces `keys.env` for local secret management, mirroring production's use
-of Google Cloud Secret Manager.
+Replaces `keys.env`-based local secret management with a lightweight Secret
+Manager emulator, mirroring production's use of Google Cloud Secret Manager.
 
 Package location: `gcp_actions.emulators.secret_manager`
 
 ## Quick Start
 
 ```bash
-cd BigBikeData/power_core
+cd gcp_actions/gcp_actions/emulators/secret_manager
 
-# 1. Start the emulator + seed it with secrets from keys.env
-./local_dev.sh start
+# 1. Build the emulator image
+podman build -t sm-emulator .
 
-# 2. Export the emulator env vars into your shell
-eval $(./local_dev.sh env)
+# 2. Start the emulator in the background
+podman run -d --name bigbikedata-sm-emulator --network host -e PORT=8083 sm-emulator
 
-# 3. Run the app — it will read secrets from the emulator automatically
-python power_core/main.py
+# 3. Seed secrets from keys.env (one-time)
+python seed.py --keys-env keys.env
+
+# 4. Verify
+curl http://localhost:8083/v1/projects/local-test-project/secrets
 ```
+
+**⚠️  `--network host` is required** — Podman's rootless port forwarding
+(pasta/slirp4netns) repeatedly dropped connections on POST requests.
+Host networking avoids this entirely.
 
 ## What Happens Under the Hood
 
-1. `compose.yaml` starts a lightweight Flask Secret Manager emulator in a
-   Podman container (port 8083). Secrets are persisted in a Podman volume.
-2. `seed.py` reads your existing `keys.env` and pushes the relevant
-   secrets into the emulator using its REST API.
-3. `local_dev.sh env` prints `export` commands for:
-   - `SECRET_MANAGER_EMULATOR_HOST=localhost:8083`
-   - `GCP_PROJECT_ID=local-test-project`
-4. When `SecretManagerClient` (in `gcp_actions`) detects
-   `SECRET_MANAGER_EMULATOR_HOST`, it switches from gRPC (real GCP) to
-   simple HTTP calls against the emulator — **zero code changes needed**
-   in your application.
+1. The emulator is a simple Flask app that stores secrets as JSON on disk
+   (persisted via a Podman volume or bind mount).
+2. `seed.py` reads your existing `keys.env` flat file and pushes each
+   secret into the emulator as the correct JSON payload.
+3. Set `SECRET_MANAGER_EMULATOR_HOST=localhost:8083` so the app uses the
+   emulator instead of real GCP Secret Manager.
+4. `SecretManagerClient` (in `gcp_actions`) auto-detects the env var and
+   switches from gRPC to simple HTTP calls — **zero application code changes**.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `emulator.py` | Flask REST API emulating Secret Manager |
-| `seed.py` | Seeds emulator from `keys.env` (supports `--keys-env`, `--emulator-host`, `--project`) |
-| `Dockerfile` | Container image for the emulator |
-| `../../../power_core/compose.yaml` | Podman Compose definition (build context points here) |
-| `../../../power_core/local_dev.sh` | Helper: start/stop/seed/env |
-| `../../secret_manager.py` | `SecretManagerClient` (auto-detects emulator via `SECRET_MANAGER_EMULATOR_HOST`) |
+| `emulator.py` | Flask REST API emulating Secret Manager (3 endpoints) |
+| `seed.py` | Seeds emulator from `keys.env` (zero external deps) |
+| `Dockerfile` | Container image (Flask dev server, no gunicorn) |
+| `../../secret_manager.py` | `SecretManagerClient` — auto-detects emulator via `SECRET_MANAGER_EMULATOR_HOST` |
 
-## Running the emulator standalone (without Compose)
-
-```bash
-# Directly:
-SM_EMULATOR_DATA_FILE=/tmp/secrets.json python -m gcp_actions.emulators.secret_manager.emulator
-
-# Seed it:
-python -m gcp_actions.emulators.secret_manager.seed --keys-env /path/to/keys.env
-```
-
-## API Surface (Emulator)
-
-The emulator implements exactly the three operations used by the app:
+## Emulator API
 
 | Operation | HTTP |
 |-----------|------|
 | Create secret | `POST /v1/projects/{p}/secrets` |
 | Add version | `POST /v1/projects/{p}/secrets/{s}:addVersion` |
 | Access version | `GET /v1/projects/{p}/secrets/{s}/versions/{v}` |
+| Health check | `GET /health` |
+| List secrets | `GET /v1/projects/{p}/secrets` |
 
 ## Managing Secrets
 
-- **Initial seed**: `cd BigBikeData/power_core && ./local_dev.sh seed` (reads `keys.env`)
-- **Add/update a secret**: Use the `update_secret_json` method in Python
-  (same as production) — it works transparently against the emulator.
+- **Initial seed**: `python seed.py --keys-env keys.env`
+- **Update a secret**: `curl -X POST .../addVersion` or use app's `update_secret_json()`
 - **View secrets**: `curl http://localhost:8083/v1/projects/local-test-project/secrets`
-- **Reset data**: `podman-compose -f compose.yaml down -v` (destroys volume)
+- **Reset everything**: `podman rm -f bigbikedata-sm-emulator && podman volume rm sm-emulator-data`
 
 ## Migration Path
 
-1. ✅ Keep `keys.env` as the source of truth for now.
-2. ✅ Run `seed.py` to populate the emulator.
-3. The app uses `SecretManagerClient` → emulator (same API as production).
-4. Eventually, stop relying on `keys.env` and manage secrets via the emulator
-   (or a real dev GCP project) directly.
+1. ✅ `keys.env` is used **once** to seed the emulator.
+2. ✅ `local_config.json` holds the `APP_JSON_KEYS` pointer (secret name).
+3. ✅ App reads all other config from the emulator, matching production.
+4. ✅ After seeding, `keys.env` is no longer needed — archive or delete it.
