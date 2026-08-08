@@ -57,8 +57,13 @@ def publish_to_pubsub(topic_name, message_data):
         if os.environ.get('K_SERVICE'):
             # In Cloud Run, use the fast gRPC client
             return publish_message_grpc(topic_name, message_data)
+        elif os.environ.get('PUBSUB_EMULATOR_HOST'):
+            # Locally with the Pub/Sub emulator running, use the gRPC client.
+            # The gRPC client respects PUBSUB_EMULATOR_HOST and routes to the
+            # emulator's endpoint inside the dev pod.
+            return publish_message_grpc(topic_name, message_data)
         else:
-            # Locally, use the reliable HTTPS client to bypass network issues
+            # Locally WITHOUT an emulator, use the reliable HTTPS client.
             return publish_message_https(topic_name, message_data)
     except Exception as e:
         logger.error(f"Failed to publish message for topic '{topic_name}': {e}", exc_info=True)

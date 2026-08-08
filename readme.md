@@ -1,10 +1,10 @@
 # gcp-actions
 
-Reusable Google Cloud helper functions.
+Reusable Google Cloud helper functions. It serve two projects: [BigBikeData](https://github.com/pathexplorer/BigBikeData) and [telegram_parcer](https://github.com/pathexplorer/telegram_parcer)
 
 ## Requirements
 
-- Python >= 3.8
+- Python >= 3.12
 - [uv](https://docs.astral.sh/uv/) – fast Python package manager.
 
 ---
@@ -26,7 +26,13 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
-### 3. Install with specific extras
+### 3. Install all extras at once (recommended)
+
+```bash
+uv pip install -e ".[processing-worker]"
+```
+
+### 4. Install with specific extras
 
 ```bash
 # With Storage support
@@ -40,12 +46,6 @@ uv pip install -e ".[firestore]"
 
 # With Secret Manager support
 uv pip install -e ".[secretmanager]"
-```
-
-### 4. Install all extras at once (recommended)
-
-```bash
-uv pip install -e ".[processing-worker]"
 ```
 
 ### Quick start (one-liner)
@@ -66,38 +66,74 @@ uv pip show gcp-actions
 
 ## Emulators (local development)
 
-For local development without real GCP credentials, the following emulators are available:
+Two local emulators are included for development without real GCP credentials.
+Source: `gcp_actions/emulators/`.
 
-### Secret Manager emulator
+| Emulator | Source | Default port |
+|----------|--------|---------------|
+| Secret Manager | `emulators/secret_manager/` | `8083` |
+| Firestore | `emulators/firestore/` | `8085` |
 
-A lightweight Flask server that mimics the Secret Manager REST API.
-Located at `gcp_actions/emulators/secret_manager/`.
+### Prerequisites
 
+- **Podman** (or Docker) installed and running
+- **Python 3.12+**
+- **Ports 8083 and 8085** free on localhost
+
+### Quick standalone start
+
+**Secret Manager emulator:**
 ```bash
 cd gcp_actions/emulators/secret_manager
 podman build -t sm-emulator .
-podman run -p 8083:8083 sm-emulator
+podman run -d --name sm-emulator -p 8083:8083 sm-emulator
+curl http://localhost:8083/health           # verify
 ```
 
-Secrets are stored in a JSON file. See `SETUP_ISSUES.md` for known quirks.
+**Firestore emulator:**
+```bash
+podman pull docker.io/google/cloud-sdk:emulators
+podman run -d --name fs-emulator -p 8085:8085 \
+    docker.io/google/cloud-sdk:emulators \
+    gcloud beta emulators firestore start --host-port=0.0.0.0:8085
+```
 
-### Firestore emulator
+### Seeding data
 
-Uses the official Google Cloud SDK Firestore emulator (`gcloud beta emulators firestore`).
-A seed script (`emulators/firestore/seed.py`) populates the initial
-`config/local/settings/data` document used by `InjectConfig`.
+Each emulator has a `seed.py` script to populate initial data:
 
 ```bash
-# Start the emulator (requires google/cloud-sdk:emulators image)
-podman run -d --name fs-emulator -p 8085:8085 \
-    google/cloud-sdk:emulators \
-    gcloud beta emulators firestore start --host-port=0.0.0.0:8085
+# Secret Manager — seed secrets from a KEY=VALUE env file
+python gcp_actions/emulators/secret_manager/seed.py --keys-env /path/to/keys.env
 
-# Seed configuration
-FIRESTORE_EMULATOR_HOST=localhost:8085 python gcp_actions/emulators/firestore/seed.py
+# Firestore — pull from real GCP (standard workflow, GCP is source of truth)
+# Auto-detects project from gcloud config, or pass it explicitly:
+gcloud auth application-default login   # one-time
+FIRESTORE_EMULATOR_HOST=localhost:8085 \
+    python gcp_actions/emulators/firestore/seed.py --from-project
+
+# Or with explicit project ID:
+# FIRESTORE_EMULATOR_HOST=localhost:8085 \
+#     python gcp_actions/emulators/firestore/seed.py \
+#     --from-project my-real-gcp-project
+
+# Firestore — with local overrides on top of GCP config
+FIRESTORE_EMULATOR_HOST=localhost:8085 \
+    python gcp_actions/emulators/firestore/seed.py \
+    --from-project my-real-gcp-project \
+    --defaults-json '{"LOGGING_LEVEL":"DEBUG"}'
+
+# Firestore — placeholder defaults (what host projects seed before pulling from GCP)
+FIRESTORE_EMULATOR_HOST=localhost:8085 \
+    python gcp_actions/emulators/firestore/seed.py
 ```
 
-For a turnkey setup of both emulators, use `local_dev.sh` from the `power_core` project.
+### Integrating into your project
+
+How you wire the emulators into your app's startup depends on your project.
+For a complete integration example — pod management, encrypted secrets volume,
+ngrok tunnel for webhook testing, and a single-command `local_dev.sh` workflow —
+see the **[power_core README](https://github.com/pathexplorer/BigBikeData/blob/main/power_core/README.md#local-development)**.
 
 ---
 

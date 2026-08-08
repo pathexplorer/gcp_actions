@@ -7,7 +7,7 @@ name = "gcp-actions"
 version = "0.3.0"
 description = "Reusable Google Cloud helper functions"
 authors = [{ name = "Stanislav", email = "bike4cats@gmail.com" }]
-requires-python = ">=3.8"
+requires-python = ">=3.12"
 
 # CORE DEPENDENCIES (Keep this list absolutely minimal)
 # These are installed for EVERY service that imports gcp-actions.

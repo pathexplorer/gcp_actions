@@ -66,10 +66,15 @@ def check_cloud_or_local_run() -> str:
     env_path = _find_env_file_path()
 
     if not env_path:
-        raise FileNotFoundError(
-            "Running locally, but no environment variables were pre-loaded and "
-            "a 'keys.env' or '.env' file could not be found by searching up from the execution path."
+        # Emulator-based config path: no .env file, but local_config.json
+        # + emulators will provide everything when InjectConfig runs.
+        # This is NOT an error — just a different local dev setup.
+        logger.warning(
+            "No 'keys.env' or '.env' file found. "
+            "If using emulators + local_config.json, this is expected — "
+            "InjectConfig will load config from Firestore/Secret Manager emulators."
         )
+        return DEFAULT_APP_ID
 
     logger.info(f"Found .env file at: {env_path}. Loading variables...")
     success = load_dotenv(dotenv_path=env_path, override=False)

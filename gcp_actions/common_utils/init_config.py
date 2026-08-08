@@ -28,7 +28,22 @@ def _find_project_root() -> Path | None:
         current_dir = current_dir.parent
 
     logger.warning("Could not find project root (.git directory). Local overrides may not be found.")
-    return {}
+    return None
+
+def _load_local_config() -> dict:
+    """Read the project's local_config.json (local equivalent of Cloud Run env vars)."""
+    project_root = _find_project_root()
+    if not project_root:
+        return {}
+    local_override_path = project_root / 'local_config.json'
+    if not local_override_path.is_file():
+        return {}
+    try:
+        with open(local_override_path, 'r') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"❌ Failed to load local overrides from '{local_override_path}': {e}")
+        return {}
 
 class InjectConfig:
     def __init__(self,
@@ -44,9 +59,21 @@ class InjectConfig:
         if self.list_of_sa_env_vars is None:
             self.list_of_sa_env_vars = []
 
+        # Load GCP_PROJECT_ID from env, falling back to local_config.json (local dev).
+        # In production this is a Cloud Run env var; locally it lives in local_config.json.
         self.project_id = os.getenv("GCP_PROJECT_ID")
         if not self.project_id:
-            raise EnvironmentError("GCP_PROJECT_ID not set in environment")
+            local_config = _load_local_config()
+            self.project_id = local_config.get("GCP_PROJECT_ID")
+            if self.project_id:
+                os.environ["GCP_PROJECT_ID"] = self.project_id
+                logger.info(f"GCP_PROJECT_ID loaded from local_config.json: {self.project_id}")
+
+        if not self.project_id:
+            raise EnvironmentError(
+                "GCP_PROJECT_ID not set. In production set it as a Cloud Run env var; "
+                "locally add it to local_config.json."
+            )
         logger.debug(f"Starting initial configuration load for project: {self.project_id}")
 
     def _inject_firestore(self):
@@ -66,21 +93,14 @@ class InjectConfig:
 
 
     def add_local_variables(self, merged_config=None):
-        project_root = _find_project_root()
-        if project_root:
-            if merged_config is None:
-                merged_config = {}
-            local_override_path = project_root / 'local_config.json'
-            if local_override_path.is_file():
-                try:
-                    with open(local_override_path, 'r') as f:
-                        local_overrides = json.load(f)
-                    merged_config.update(local_overrides)
-                    logger.warning(f"✅ Applied {len(local_overrides)} overrides from '{local_override_path}'.")
-                except (json.JSONDecodeError, IOError) as e:
-                    logger.error(f"❌ Failed to load local overrides from '{local_override_path}': {e}")
-            else:
-                logger.info("No local override file found. Using production/default config.")
+        if merged_config is None:
+            merged_config = {}
+        local_overrides = _load_local_config()
+        if local_overrides:
+            merged_config.update(local_overrides)
+            logger.warning(f"✅ Applied {len(local_overrides)} overrides from 'local_config.json'.")
+        else:
+            logger.info("No local override file found. Using production/default config.")
 
     def _final_merge(self, merged_config):
         # 5. Inject the final merged config into the environment
