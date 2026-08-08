@@ -53,7 +53,7 @@ def _find_keys_env() -> str | None:
         os.environ.get("KEYS_ENV_PATH"),
         # Relative to this file:  gcp_actions/gcp_actions/emulators/secret_manager/seed.py
         # Going up 5 levels gets us to the monorepo root (main/)
-        Path(__file__).resolve().parents[5] / "BigBikeData" / "power_core" / "project_env" / "keys.env",
+        Path(__file__).resolve().parents[4] / "BigBikeData" / "power_core" / "project_env" / "keys.env",
         # Legacy hard-coded path
         Path.home() / "mega" / "projects" / "BigBikeData" / "keys.env",
     ]
@@ -148,6 +148,7 @@ SECRET_CONFIG_MAP = {
         "DONATION_HTML_SNIPPET_PRIVAT",
         "BACKEND_TAG",
         "FRONTEND_TAG",
+        "DROpbox_WEBHOOK_PATH",
     ],
     # --- dropbox-secrets (Dropbox + Strava + PG keys — combined secret) ---
     "SEC_DROPBOX": [

@@ -65,10 +65,10 @@ class InjectConfig:
             return {}
 
 
-    def add_local_variables(self, merged_config = None):
+    def add_local_variables(self, merged_config=None):
         project_root = _find_project_root()
         if project_root:
-            if not merged_config:
+            if merged_config is None:
                 merged_config = {}
             local_override_path = project_root / 'local_config.json'
             if local_override_path.is_file():
@@ -97,11 +97,20 @@ class InjectConfig:
         """
         Loads configuration from Firestore and Secret Manager, then applies local overrides.
         The order of precedence is: Local Overrides > Secrets > Firestore.
+
+        NOTE: local_config is applied BEFORE secrets so that secret *name* env vars
+        (APP_JSON_KEYS, SEC_DROPBOX, etc.) are available when fetching from Secret Manager.
         """
-        # Start the first part
+        # 1. Load base config from Firestore
         firestore_config = self._inject_firestore()
 
-        # 2. Load secrets from Secret Manager
+        # 2. Apply local overrides FIRST — this populates secret *name* env vars
+        #    (e.g. APP_JSON_KEYS=fullstack-app-json-keys) so we know which secrets to fetch.
+        merged_config = {**firestore_config}
+        self.add_local_variables(merged_config)
+        self._final_merge(merged_config)
+
+        # 3. NOW load secrets from Secret Manager (secret names are available)
         all_secrets_data = {}
         if self.list_of_secret_env_vars:
             try:
@@ -117,7 +126,7 @@ class InjectConfig:
                         logger.warning(f"Env var '{secret_env_var}' for secret name is not set. Skipping.")
                         continue
 
-                    logger.debug(f"Processing secret...")
+                    logger.debug(f"Processing secret '{secret_name}' ({secret_env_var})...")
                     sm = SecretManagerClient(self.project_id, service_account_email)
                     current_secret_data = sm.get_secret_json(secret_name)
 
@@ -130,11 +139,10 @@ class InjectConfig:
         else:
             logger.debug("No secrets specified to load.")
 
-        # 3. Merge configurations (Secrets overwrite Firestore)
-        merged_config = {**firestore_config, **all_secrets_data}
+        # 4. Merge secrets on top (overwriting Firestore/local defaults with real secrets)
+        merged_config.update(all_secrets_data)
 
-        # 4. Apply local overrides from the project root
-        # Possibility run only these two last parts for only loads some additional locale variables
+        # 5. Re-apply local overrides on top of secrets (local wins over everything)
         self.add_local_variables(merged_config)
         self._final_merge(merged_config)
 
