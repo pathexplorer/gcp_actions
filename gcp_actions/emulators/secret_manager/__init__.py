@@ -1,4 +1,9 @@
-# Secret Manager emulator — local development replacement for GCP Secret Manager.
-#
-# Run as a standalone Flask app (containerized via the included Dockerfile)
-# or directly:  python -m gcp_actions.emulators.secret_manager.emulator
+"""
+Secret Manager emulator for local development.
+
+Provides a Flask-based HTTP API compatible with the Secret Manager v1 REST API.
+Run via Docker (included Dockerfile) or directly:
+    python -m gcp_actions.emulators.secret_manager.emulator
+
+Persists secrets to JSON file for survival across container restarts.
+"""

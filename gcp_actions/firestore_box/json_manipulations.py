@@ -1,3 +1,11 @@
+"""
+Firestore document manipulation utilities with auto-creation and backup support.
+
+Provides high-level CRUD operations for Firestore documents, including
+automatic creation from templates, field deletion, backup/prune workflows,
+and array-to-CSV conversion.
+"""
+
 from datetime import datetime, timezone
 from google.cloud.firestore_v1.field_path import FieldPath
 from gcp_actions.client import get_any_client
@@ -9,24 +17,28 @@ logger = logging.getLogger(__name__)
 
 
 class FirestoreMagic:
+    """High-level wrapper for Firestore document operations with auto-create and backup."""
+
     def __init__(
             self,
             collection_name: str,
             doc_load_name: str,
             placeholder_full: dict | None = None
     ):
-        """
-        :param collection_name: name of the collection
-        :param doc_load_name: single document name or path "doc/sub_collection/sub_doc_id"
-        :param placeholder_full: dict with placeholder fields
+        """Initialize the Firestore document handler.
+
+        Args:
+            collection_name: Name of the Firestore collection.
+            doc_load_name: Document ID or path (e.g., "doc" or "doc/subcoll/subdoc").
+            placeholder_full: Default data to create document with if missing.
         """
         self.client = get_any_client("firestore")
         self.collection_name = collection_name
         self.doc_load_name = doc_load_name
         self.placeholder_full = placeholder_full
 
-    def _create_resource_if_not_exists(self, doc_ref):
-        """Internal method to handle the 'if exist' logic."""
+    def _create_resource_if_not_exists(self, doc_ref) -> Any:
+        """Create document from placeholder if it doesn't exist; return snapshot."""
         if doc_ref is None:
                logger.error(f"An error occurred during resource creation: {doc_ref}, in None")
                return None
@@ -44,11 +56,8 @@ class FirestoreMagic:
             logger.debug("OK - Resource already exists")
             return doc_snapshot
 
-    def load_firejson(self) -> dict[Any, Any] | None | Any:
-        """
-        If existed, get() + to_dict(). If not existed, create dict from a placeholder. \n
-        :return: dict (which gets from snapshot) or empty dict if it doesn't exist
-        """
+    def load_firejson(self) -> dict | None:
+        """Load document as dict, creating from placeholder if missing."""
         if "/" in self.doc_load_name:
             full_path = os.path.join(self.collection_name, self.doc_load_name)
             doc_ref = self.client.document(full_path)
@@ -86,34 +95,24 @@ class FirestoreMagic:
         #     config_path = f"config/{APP_ID}/settings/data"
         # # --- END DYNAMIC CONFIG PATH ---
 
-    def create_firejson(self, data_name):
-        """
-        method set()
-        :param data_name:
-        :return:
-        """
+    def create_firejson(self, data_name: dict):
+        """Create a new document with the given data (overwrites if exists)."""
         doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
         doc_ref.set(data_name)
 
 
-    def set_firejson(self, data_name, merge: bool | None = None):
-        """
-        method set()
-        :param data_name:
-        :param merge: If None - overwrite a document or create it if it doesn't exist yet.
-      If True - update fields in the document or create it if it doesn't exist
-        :return:
+    def set_firejson(self, data_name: dict, merge: bool | None = None):
+        """Set document data with optional merge behavior.
+
+        Args:
+            data_name: Data to write.
+            merge: None to overwrite, True to merge with existing fields.
         """
         doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
         doc_ref.set(data_name, merge)
 
     def backup_document(self, backup_collection_name: str | None = None):
-        """
-        Copy the current document to a timestamped backup document.
-        Writes to `{collection_name}_backups/{doc_name}_{ISO8601_timestamp}`.
-
-        :param backup_collection_name: override backup collection (default: {collection}_backups)
-        """
+        """Copy current document to a timestamped backup in {collection}_backups/."""
         if backup_collection_name is None:
             backup_collection_name = f"{self.collection_name}_backups"
 
@@ -144,13 +143,7 @@ class FirestoreMagic:
                     backup_collection_name, backup_doc_id, len(data))
 
     def prune_old_backups(self, max_backups: int = 30, backup_collection_name: str | None = None):
-        """
-        Keep only the `max_backups` most recent backup documents for this doc.
-        Deletes older backups from the backup collection.
-
-        :param max_backups: number of most recent backups to retain
-        :param backup_collection_name: override backup collection (default: {collection}_backups)
-        """
+        """Delete old backups beyond max_backups, keeping only the most recent."""
         if backup_collection_name is None:
             backup_collection_name = f"{self.collection_name}_backups"
 
@@ -184,12 +177,8 @@ class FirestoreMagic:
         logger.info("prune_old_backups: deleted %d old backups, %d remain.",
                     excess, len(backups) - excess)
 
-    def update_firejson(self, data_name):
-        """
-        method update()
-        :param data_name:
-        :return:
-        """
+    def update_firejson(self, data_name: dict):
+        """Update specific fields in the document (creates if missing)."""
         doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
         doc_ref.update(data_name)
 
@@ -198,11 +187,13 @@ class FirestoreMagic:
         "normal",
         "path"
     ]
+
     def delete_field_firejson(self, field_for_delete: str, mode: Mode = "normal"):
-        """
-        :param field_for_delete:
-        :param mode:
-        :return:
+        """Delete a field from the document, supporting dot-notation paths.
+
+        Args:
+            field_for_delete: Field name or dot-separated path (e.g., "nested.field").
+            mode: "normal" for top-level field, "path" for nested FieldPath.
         """
         try:
             doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
@@ -226,16 +217,7 @@ class FirestoreMagic:
             array_field_key: str,
             separator: str = ','
     ) -> str:
-        """
-        Unpacks a specific array field from a Firestore document into a
-        single string with elements separated by the specified separator.
-
-        :param document: The Firestore document dictionary (e.g., {"id": 1, "tags": ["a", "b"]}).
-        :param array_field_key: The key of the array field to unpack (e.g., "tags").
-        :param separator: The character to use for separation (default is comma ',').
-        :returns: A comma-separated string of the array elements. Returns an empty string if the key is not found or the value is not a list.
-        :rtype: string
-        """
+        """Join array field elements into a separator-delimited string."""
 
         # 1. Necessary checks and error handling (as requested)
         if not isinstance(document, dict):

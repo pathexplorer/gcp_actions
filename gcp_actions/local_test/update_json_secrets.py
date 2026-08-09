@@ -1,7 +1,11 @@
+#!/usr/bin/env python3
 """
-LOCAL RUNNING CONFIGURATION
-Manual script for first setup cloud secrets
+Local script to initialize Cloud Secret Manager secrets from .env files.
+
+Loads token_api.env and keys.env, then creates/updates secrets in
+Secret Manager for Dropbox and Strava credentials.
 """
+
 from gcp_actions.secret_manager import SecretManagerClient
 import subprocess
 import logging
@@ -20,22 +24,17 @@ dotenv_path = PROJECTS_ROOT / token_api_env_path
 if dotenv_path.is_file():
     load_dotenv(dotenv_path=dotenv_path)
     print(f"Successfully loaded environment from: {dotenv_path}")
-    # ... your code continues ...
 else:
-    print(f"🯀 ERROR: Environment file not found at: {dotenv_path}")
-    # Exit or handle error
+    print(f"ERROR: Environment file not found at: {dotenv_path}")
 
 dotenv_path1 = PROJECTS_ROOT / keys_env_path
 if dotenv_path1.is_file():
     load_dotenv(dotenv_path=dotenv_path1)
     print(f"Successfully loaded environment from: {dotenv_path1}")
-    # ... your code continues ...
 else:
-    print(f"🯀 ERROR: Environment file not found at: {dotenv_path1}")
-    # Exit or handle error
+    print(f"ERROR: Environment file not found at: {dotenv_path1}")
 
-# Setup
-
+# Secret configuration mapping
 SECRET_CONFIG_MAP = {
     "SEC_DROPBOX": [
         "DROPBOX_APP_KEY",
@@ -52,28 +51,17 @@ SECRET_CONFIG_MAP = {
 }
 
 
-
 def get_gcloud_config(key: str) -> str:
-    """
-    LOCAL RUNNING CONFIGURATION
-    Get PROJECT_ID from gcloud config
-    """
+    """Get a value from gcloud config (e.g., project ID)."""
     result = subprocess.run(
         ["gcloud", "config", "get-value", key],
         capture_output=True, text=True
     )
     value = result.stdout.strip()
     if not value:
-        logging.warning(f"🯀 gcloud config key '{key}' returned empty.")
+        logging.warning(f"gcloud config key '{key}' returned empty.")
         raise ValueError(f"Missing gcloud config value for key: '{key}'")
     return value
-
-# # Usage
-# try:
-#     project_id = get_gcloud_config("project")
-#     print(f"✅ Active project: {project_id}")
-# except ValueError as e:
-#     print(f"❌ Error: {e}")
 
 
 sm = SecretManagerClient(get_gcloud_config("project"))
@@ -90,30 +78,16 @@ for gsm_secret_env_name, payload_env_keys in SECRET_CONFIG_MAP.items():
         }
 
         # 3. Update the secret with the new JSON payload
-        sm.update_secret_json(gsm_secret_name, json_payload)  # This is your custom method
+        sm.update_secret_json(gsm_secret_name, json_payload)
 
-        print(f"    ✓ Successfully updated secret: {gsm_secret_name}")
+        print(f"    Successfully updated secret: {gsm_secret_name}")
         print(f"    - Payload Keys: {list(json_payload.keys())}")
 
     except KeyError as e:
         # Handle errors for missing environment variables
-        print(f"  🯀 ERROR: Missing environment variable {e}. Skipping {gsm_secret_env_name}.")
+        print(f"  ERROR: Missing environment variable {e}. Skipping {gsm_secret_env_name}.")
     except Exception as e:
         # Handle other errors (e.g., permissions)
-        print(f"  🯀 ERROR: Failed to update. Details: {e}")
+        print(f"  ERROR: Failed to update. Details: {e}")
 
-print("\n▷ Secret update process finished.")
-
-
-
-#--- 6. Read the JSON secret in your application ---
-# try:
-#     print(f"Fetching secret: {main_secret_id}")
-#
-#     # This is the main method you'll use
-#     secrets_dict = sm.get_secret_json(main_secret_id)
-#
-#     for secret_id in secrets_dict:
-#         print(f"Secret: ...{secrets_dict[secret_id][-4:]}")
-# except Exception as e:
-#     print(f"Error accessing secret: {e}")
+print("\nSecret update process finished.")

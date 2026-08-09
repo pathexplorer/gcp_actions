@@ -1,3 +1,10 @@
+"""
+GCP client factory with credential caching and service account impersonation.
+
+Provides memoized access to Firestore, Storage, and other Google Cloud clients
+with support for workload identity federation via impersonation.
+"""
+
 from google.cloud import storage, firestore
 from google.auth import impersonated_credentials, default as default_credentials
 from google.auth.exceptions import DefaultCredentialsError
@@ -14,18 +21,17 @@ lr.check_cloud_or_local_run()
 
 @lru_cache(maxsize=8)
 def get_env_and_cashed_it(variable: str) -> str:
-    """
-    Loads and caches a required variable from the environment.
+    """Load and cache a required environment variable.
 
     Args:
-        variable: The name of the environment variable (e.g., "GCP_PROJECT_ID").
+        variable: Name of the environment variable to retrieve.
 
     Returns:
-        The value of the environment variable.
+        The environment variable value.
 
     Raises:
-        ValueError: If the variable name is empty or not a string.
-        EnvironmentError: If the environment variable is not set.
+        ValueError: If variable name is empty or not a string.
+        EnvironmentError: If the variable is not set.
     """
     if not variable or not isinstance(variable, str):
         raise ValueError("The environment variable name must be a non-empty string.")
@@ -42,19 +48,18 @@ def get_env_and_cashed_it(variable: str) -> str:
 
 @lru_cache(maxsize=8)
 def get_any_client(client_name: str, target_principal: str | None = None):
-    """
-    Client Factory: Creates and caches a Google Cloud client, with optional impersonation.
+    """Create and cache a GCP client with optional service account impersonation.
 
     Args:
-        client_name: The name of the client to create. Supported: "firestore", "storage".
-        target_principal: The email of the service account to impersonate.
+        client_name: Client type ("firestore" or "storage").
+        target_principal: Service account email to impersonate.
 
     Returns:
-        An initialized Google Cloud client instance.
+        Initialized Google Cloud client instance.
 
     Raises:
-        ValueError: If the client_name is not supported.
-        RuntimeError: If client creation fails due to credential or permission issues.
+        ValueError: If client_name is not supported.
+        RuntimeError: If client creation fails due to auth/permission issues.
     """
     client_map = {"firestore": firestore.Client, "storage": storage.Client}
     client_name_lower = client_name.lower()
@@ -93,14 +98,18 @@ def get_any_client(client_name: str, target_principal: str | None = None):
 
 @lru_cache(maxsize=8)
 def get_bucket(bucket_name: str, impersonate_sa: str | None = None) -> storage.Bucket:
-    """
-    Gets a Google Cloud Storage bucket handle, supporting Requester Pays and impersonation.
+    """Get a GCS bucket handle, resolving bucket name from env var if needed.
 
-    :param bucket_name: "GCS_BUCKET_NAME" - the literal bucket name or an environment variable containing the name.
-    :param impersonate_sa: The service account to impersonate for this request.
-    :return: A storage.Bucket object.
-    :raise ValueError: If the bucket name is empty.
-    :raise RuntimeError: If the storage client cannot be created, or the bucket cannot be accessed.
+    Args:
+        bucket_name: Bucket name or environment variable name containing it.
+        impersonate_sa: Optional service account to impersonate for access.
+
+    Returns:
+        A storage.Bucket object (lazy, no network call until used).
+
+    Raises:
+        ValueError: If bucket name is empty.
+        RuntimeError: If storage client cannot be created.
     """
     try:
         # If an env var with this name exists, use its value; otherwise, use the name directly.

@@ -1,3 +1,10 @@
+"""
+Pub/Sub publishing utilities with environment-aware client selection.
+
+Automatically chooses between gRPC (Cloud Run) and HTTPS (local/emulator)
+clients based on runtime environment variables.
+"""
+
 from gcp_actions.common_utils import local_runner as lr
 import logging
 from gcp_actions.common_utils.timer import run_timer
@@ -13,8 +20,8 @@ lr.check_cloud_or_local_run()
 
 # --- Environment-Aware Publishing ---
 @run_timer
-def publish_message_grpc(topic_name, message_data):
-    """Publishes using the modern, high-performance gRPC client (for Cloud Run)."""
+def publish_message_grpc(topic_name: str, message_data: dict) -> str:
+    """Publish a message using the high-performance gRPC client (Cloud Run)."""
     project_id = os.environ.get('GCP_PROJECT_ID')
     if not project_id:
         # Fallback for local testing or if the environment variable is missing
@@ -29,8 +36,8 @@ def publish_message_grpc(topic_name, message_data):
 
 
 @run_timer
-def publish_message_https(topic_name, message_data):
-    """Publishes using the stable, pure HTTPS client (for local development)."""
+def publish_message_https(topic_name: str, message_data: dict) -> str:
+    """Publish a message using the HTTPS REST client (local development)."""
     project_id = os.environ.get('GCP_PROJECT_ID')
     from googleapiclient.discovery import build
     from google.auth import default
@@ -51,8 +58,14 @@ def publish_message_https(topic_name, message_data):
     return message_id
 
 
-def publish_to_pubsub(topic_name, message_data):
-    """ Selects the appropriate publishing method based on the environment."""
+def publish_to_pubsub(topic_name: str, message_data: dict) -> str:
+    """Publish to Pub/Sub, automatically selecting gRPC or HTTPS based on environment.
+
+    Priority:
+    1. gRPC client if running in Cloud Run (K_SERVICE set)
+    2. gRPC client if PUBSUB_EMULATOR_HOST is set (local emulator)
+    3. HTTPS client for local development without emulator
+    """
     try:
         if os.environ.get('K_SERVICE'):
             # In Cloud Run, use the fast gRPC client

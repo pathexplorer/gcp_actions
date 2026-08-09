@@ -1,3 +1,10 @@
+"""
+Google Cloud Storage blob manipulation utilities.
+
+Provides filename generation, upload, download, and deletion operations
+for GCS blobs with support for Requester Pays and local development.
+"""
+
 from gcp_actions.client import get_bucket
 from google.api_core.exceptions import GoogleAPICallError, Forbidden
 from typing import Any, Literal
@@ -8,16 +15,9 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
-    """
-    Generates a unique filename within a specified subcatalog.
 
-    :param original_filename: The original name of the file (e.g., "my_photo.jpg").
-    :param subcatalog: The subcatalog where the file will be stored (e.g., "user_uploads").
-    :return: A unique path string in the format "subcatalog/uuid4.extension".
-    :raise ValueError: If original_filename or subcatalog are empty or invalid.
-    :raise Exception: For any other unexpected errors during generation.
-    """
+def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
+    """Generate a unique GCS object path using UUID4 while preserving the file extension."""
     try:
         if not original_filename or not isinstance(original_filename, str):
             raise ValueError("original_filename must be a non-empty string.")
@@ -39,6 +39,8 @@ def generate_unique_filename(original_filename: str, subcatalog: str) -> str:
 
 # todo rewrite module as class
 class StorageManipulations:
+    """Handle GCS upload operations for files, filenames, and raw strings."""
+
     def __init__(
             self,
             bucket_name: str,
@@ -46,11 +48,13 @@ class StorageManipulations:
             local_path: Any | None = None,
             content_type_set: str | None = None,
     ) -> None:
-        """
-        :param bucket_name: variable GCS_BUCKET_NAME or GCS_PUBLIC_BUCKET
-        :param gcs_path: folder/filename.extension, on Storage, gs://
-        :param local_path: /folder/filename, on a virtual machine
-        :param content_type_set:
+        """Initialize the storage manipulation handler.
+
+        Args:
+            bucket_name: GCS bucket name or environment variable containing it.
+            gcs_path: Destination path in GCS (e.g., 'folder/file.ext').
+            local_path: Local file path or string content to upload.
+            content_type_set: MIME type for string uploads (e.g., 'application/json').
         """
         # --- Variables ---
         self.gcs_path = gcs_path
@@ -62,18 +66,24 @@ class StorageManipulations:
         self.set_blob = self.bucket.blob(self.gcs_path)
 
     # --- Filename ---
-    def _check_filename(self):
+    def _check_filename(self) -> None:
+        """Verify that the local file exists before upload."""
         if not os.path.isfile(self.local_path):
             raise FileNotFoundError(f"Local file not found: {self.local_path}")
-    def _upload_from_file(self):
+
+    def _upload_from_file(self) -> None:
+        """Upload using file object (for large files)."""
         self._check_filename()
         self.set_blob.upload_from_file(self.local_path)
-    def _upload_from_filename(self):
+
+    def _upload_from_filename(self) -> None:
+        """Upload using local file path."""
         self._check_filename()
         self.set_blob.upload_from_filename(self.local_path)
 
     # --- String ---
-    def _upload_from_string(self):
+    def _upload_from_string(self) -> None:
+        """Upload raw string content with explicit content type."""
         self.set_blob.upload_from_string(self.local_path, content_type=self.content_type_set)
 
     # --- Start upload
@@ -82,15 +92,13 @@ class StorageManipulations:
         "filename",
         "string"
     ]
+
     def upload_to_gcp_bucket(
         self,
         filetype: FileType = "",
         user_project: str | None = None
     ) -> str | None:
-        """
-        :param user_project:
-        :param filetype: "filename" or "string" (json)
-        """
+        """Upload content to GCS based on the specified filetype mode."""
         if not self.gcs_path:
             raise ValueError("GCS path must not be empty")
         logger.debug("Start upload to GCS")
@@ -115,15 +123,18 @@ def download_from_gcp_bucket(
         filetype: str = "",
         user_project: str | None = None
 ) -> bool | Any | None:
-    """
-    Downloads a file from GCS, supporting Requester Pays.
+    """Download a blob from GCS, supporting both file and text (JSON) modes.
 
-    :param bucket_name: An env var name (e.g., "GCS_BUCKET_NAME") or the literal bucket name.
-    :param blob_name: The full path to the blob inside the bucket.
-    :param local_path: The local path to save the file (required for 'blob' filetype).
-    :param filetype: "blob" to download to a file, or "text" to download as a string.
-    :param user_project: The project ID to bill for Requester Pays requests.
-    :return: Varies based on filetype.
+    Args:
+        bucket_name: Bucket name or environment variable name.
+        blob_name: Full path to the blob in the bucket.
+        local_path: Local destination path (required for filetype='blob').
+        filetype: 'blob' to save as file, 'text' to parse as JSON string.
+        user_project: Project ID to bill for Requester Pays buckets.
+
+    Returns:
+        True for successful file download, parsed JSON dict for text mode,
+        False if blob not found in blob mode, empty dict if not found in text mode.
     """
     bucket = get_bucket(bucket_name)
     if not blob_name:
@@ -167,16 +178,18 @@ def delete_blob(
         user_project: str | None = None
 
 ) -> bool:
-    """
-    Deletes a Google Cloud Storage blob robustly, handling existence,
-    permissions, and API errors.
-        :param bucket_name: GCS bucket name
-        :param blob_name: The full path to the blob inside the bucket (e.g., 'data/file.csv').
-        :param user_project:
-        :return: True if the blob is successfully deleted or if it did not exist. False on error.
-        :exception Forbidden:
-        :exception GoogleAPICallError:
-        :exception Exception:
+    """Delete a GCS blob, returning True on success or if already absent.
+
+    Handles permission errors, API failures, and missing blobs gracefully
+    without raising exceptions. Logs detailed error context for debugging.
+
+    Args:
+        bucket_name: GCS bucket name or environment variable name.
+        blob_name: Full path to the blob in the bucket.
+        user_project: Project ID to bill for Requester Pays buckets.
+
+    Returns:
+        True if deleted or already missing, False on permission/API errors.
     """
     bucket = get_bucket(bucket_name)
     if not blob_name:

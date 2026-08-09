@@ -1,3 +1,10 @@
+"""
+Timing utilities for profiling pipeline stages and function execution.
+
+Provides context managers for stage timing, a decorator for function timing,
+and a table formatter for logging duration breakdowns.
+"""
+
 import time
 from typing import Dict, Union
 
@@ -6,11 +13,10 @@ from unittest import result
 import logging
 logger = logging.getLogger(__name__)
 
+
 @contextmanager
 def time_stage(stage_name: str, total_times_dict: dict):
-    """
-    A context manager to time a pipeline stage and log the duration.
-    """
+    """Context manager to time a pipeline stage and record duration."""
     start_time = time.perf_counter()
     logger.debug(f"--- Starting {stage_name}...")
     try:
@@ -26,13 +32,8 @@ def time_stage(stage_name: str, total_times_dict: dict):
         logger.debug(f"--- Finished {stage_name}: {duration:.3f} seconds.")
 
 
-def log_duration_table(all_stage_times, pipeline_type: str) -> None:
-    """
-    Calculates the percentage of total duration for each item and logs the
-    results in a formatted table using logging.info.
-    :param pipeline_type: public or private
-    :param all_stage_times:
-    """
+def log_duration_table(all_stage_times: dict, pipeline_type: str) -> None:
+    """Log a formatted table of stage durations with percentages."""
     total_duration = sum(all_stage_times.values())
 
     name_duration_dict = {}
@@ -85,10 +86,7 @@ def log_duration_table(all_stage_times, pipeline_type: str) -> None:
 
 
 def run_timer(func):
-    """
-    A decorator that standardizes the timing of a function.
-    Ignore measures that are smaller than 0.01 seconds
-    """
+    """Decorator to log function execution time if > 0.01s."""
     def wrapper(*args, **kwargs):
         t_start = time.time()
         t_result = func(*args, **kwargs)

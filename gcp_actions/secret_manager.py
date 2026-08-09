@@ -1,3 +1,10 @@
+"""
+Secret Manager client with support for GCP production and local emulator.
+
+Provides typed access to secrets stored as JSON, plain text, or raw bytes.
+Supports service account impersonation for cross-project secret access.
+"""
+
 from google.cloud import secretmanager
 from google.api_core.exceptions import AlreadyExists
 import json
@@ -22,39 +29,25 @@ logger = logging.getLogger(__name__)
 
 
 class SecretManagerClient:
-    """
-    Client for managing and accessing GCP Secrets, with helpers for
-    handling secrets stored as plain text which code in UTF-8 (standard usage),
-    plain text without any code, and as JSON strings.
+    """Client for managing and accessing GCP Secret Manager secrets.
 
-    Emulator mode:
-        Set environment variable SECRET_MANAGER_EMULATOR_HOST to point to a
-        local Secret Manager emulator (e.g. "localhost:8083"). The client
-        will then use simple HTTP calls instead of gRPC.
+    Supports three payload formats:
+    - JSON (get_secret_json / update_secret_json)
+    - UTF-8 text (get_secret_string with utf_coding="yes")
+    - Raw bytes (get_secret_string with utf_coding="no")
 
-    Usage:
-        1. Import:
-        from gcp_actions.secret_manager import SecretManagerClient
-        from gcp_actions.client import get_env_and_cashed_it
-        2. Access:
-        If you use one service account:
-        sm = SecretManagerClient(get_env_and_cashed_it("GCP_PROJECT_ID"))
-        If you use many service accounts for certain serviced
-        sm = SecretManagerClient(
-            get_env_and_cashed_it("GCP_PROJECT_ID"),
-            full email specify service account)
-        access_dict = sm.get_secret_json("{name of secret}")
+    Emulator mode is activated by setting SECRET_MANAGER_EMULATOR_HOST
+    environment variable (e.g., "localhost:8083").
     """
 
     # Inject the Project_ID into the class constructor
     @run_timer
-    def __init__(self, project_id: str, target_sa_email: str = None):
-        """
-        Initializes the client.
+    def __init__(self, project_id: str, target_sa_email: str | None = None):
+        """Initialize the Secret Manager client.
 
-        :param project_id: The GCP project ID.
-        :param target_sa_email: The email of the Service Account to impersonate.
-                                If None, the client uses default credentials.
+        Args:
+            project_id: GCP project ID containing the secrets.
+            target_sa_email: Optional service account to impersonate for access.
         """
         self.project_id = project_id
 
@@ -88,9 +81,7 @@ class SecretManagerClient:
 
     @staticmethod
     def _create_impersonated_credentials(target_sa_email: str):
-        """
-        Generates short-lived credentials for the target Service Account.
-        """
+        """Create short-lived impersonated credentials for a target service account."""
         # The Runtime SA needs the 'roles/iam.serviceAccountUser' role on the target SA
 
         # 1. Get the source credentials (the identity the code is running as)
@@ -109,34 +100,7 @@ class SecretManagerClient:
 
         return impersonated_creds, http_session
     def get_secret_json(self, secret_id: str) -> dict:
-        """
-        Gets the latest secret, decodes it, and parses it as JSON.
-
-        :param secret_id: The ID (name) of the secret in Secret Manager.
-        :return: A Python dictionary parsed from the secret's JSON payload.
-
-        Example usage (simplified from get_session.py)::
-
-            # Name of the secret in Secret Manager (stores JSON data)
-            TELEGRAM_SECRETS = os.environ.get("TELEGRAM_SECRETS")
-
-            def get_secrets():
-                sm = SecretManagerClient(GCP_PROJECT_ID)
-                extracted_data = sm.get_secret_json(TELEGRAM_SECRETS)
-
-                # Inject the config into the environment
-                for key, value in extracted_data.items():
-                    os.environ[key] = str(value)
-
-            get_secrets()
-            TEST1_ID_STR = os.environ.get("TEST1_ID")
-            TEST_HASH_STR = os.environ.get("TEST_HASH")
-            assert TEST1_ID_STR is not None, "error1"
-            assert TEST_HASH_STR is not None, "error2"
-
-            TEST1_ID = int(TEST1_ID_STR)
-            TEST_HASH: str = TEST_HASH_STR
-        """
+        """Fetch the latest secret version and parse it as JSON."""
         try:
             # First, get the raw string value
             secret_string = self.get_secret_string(secret_id)
@@ -147,12 +111,7 @@ class SecretManagerClient:
             raise ValueError(f"Secret '{secret_id}' payload is not valid JSON: {e}")
 
     def update_secret_json(self, secret_id: str, new_data_dict: dict):
-        """
-        Adds a new secret version from a Python dictionary.
-        The dictionary will be converted to a JSON string.
-        :param secret_id: The ID of the secret to update.
-        :param new_data_dict: The Python dictionary to store.
-        """
+        """Add a new secret version from a Python dictionary (serialized as JSON)."""
         # Convert the dictionary to a JSON string
         # 'indent=2' makes it human-readable in the GCP console
         json_string = json.dumps(new_data_dict, indent=2)
@@ -161,11 +120,19 @@ class SecretManagerClient:
         self.update_secret_string(secret_id, json_string)
         logger.info(f"Secret updated with new JSON version.")
     @run_timer
-    def get_secret_string(self, secret_id: str, version_id="latest", utf_coding: str = 'yes'):
-        """Get secret from GCP API (or emulator when SECRET_MANAGER_EMULATOR_HOST is set).
-        :param secret_id: "your-secret-id"
-        :param version_id: GCP version ID
-        :param utf_coding: yes (is string UTF-8) or no (raw bytes, as a sample session file)
+    def get_secret_string(self, secret_id: str, version_id: str = "latest", utf_coding: str = "yes") -> str | bytes:
+        """Fetch a secret version as UTF-8 string or raw bytes.
+
+        Args:
+            secret_id: Secret name in Secret Manager.
+            version_id: Version to fetch (default: "latest").
+            utf_coding: "yes" to decode as UTF-8 string, "no" for raw bytes.
+
+        Returns:
+            Decoded string or raw bytes depending on utf_coding.
+
+        Raises:
+            ValueError: If utf_coding is not "yes" or "no", or decoding fails.
         """
         if self._use_emulator:
             return self._emulator_access_secret(secret_id, version_id, utf_coding)
@@ -183,7 +150,8 @@ class SecretManagerClient:
         else:
             raise ValueError(f"Invalid 'utf_coding' value: {utf_coding}")
 
-    def update_secret_string(self, secret_id: str, new_value):
+    def update_secret_string(self, secret_id: str, new_value: str):
+        """Add a new version to an existing secret with the given string value."""
         if self._use_emulator:
             self._emulator_add_version(secret_id, new_value)
             return
@@ -197,6 +165,7 @@ class SecretManagerClient:
         )
 
     def create_secret(self, secret_id: str):
+        """Create a new secret with automatic replication if it doesn't exist."""
         if self._use_emulator:
             self._emulator_create_secret(secret_id)
             return
@@ -219,7 +188,7 @@ class SecretManagerClient:
     # Emulator helper methods (HTTP-based)
     # ------------------------------------------------------------------
     def _emulator_request(self, method: str, path: str, body: dict | None = None) -> dict:
-        """Make an HTTP request to the emulator and return parsed JSON."""
+        """Send an HTTP request to the emulator and return parsed JSON response."""
         url = f"{self._emulator_base}{path}"
         data = None
         headers = {"Content-Type": "application/json"}
@@ -251,7 +220,7 @@ class SecretManagerClient:
             ) from e
 
     def _emulator_access_secret(self, secret_id: str, version_id: str, utf_coding: str) -> str:
-        """GET /v1/projects/<p>/secrets/<id>/versions/<ver>"""
+        """Retrieve a secret version from the emulator via GET request."""
         path = f"/v1/projects/{self.project_id}/secrets/{secret_id}/versions/{version_id}"
         resp = self._emulator_request("GET", path)
         data = resp.get("payload", {}).get("data", "")
@@ -260,12 +229,12 @@ class SecretManagerClient:
         return data.strip() if isinstance(data, str) else str(data)
 
     def _emulator_add_version(self, secret_id: str, value: str):
-        """POST /v1/projects/<p>/secrets/<id>:addVersion"""
+        """Add a new version to a secret in the emulator via POST request."""
         path = f"/v1/projects/{self.project_id}/secrets/{secret_id}:addVersion"
         self._emulator_request("POST", path, body={"payload": {"data": value}})
 
     def _emulator_create_secret(self, secret_id: str):
-        """POST /v1/projects/<p>/secrets"""
+        """Create a new secret in the emulator via POST request."""
         path = f"/v1/projects/{self.project_id}/secrets"
         self._emulator_request(
             "POST", path,

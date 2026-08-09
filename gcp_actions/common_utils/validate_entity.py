@@ -1,21 +1,26 @@
+"""
+Validate that environment variable values are lowercase (GCS naming requirement).
+
+All resource names in this project must be lowercase per cloud storage
+naming conventions. This validates env var values, not the env var names.
+"""
+
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 def validate_name(env_var_name: str) -> str:
-    """
-    Quick and simple function to validate a name from an environment variable. All names in this project are lowercase.
-    And all names of variable is uppercase. So,
+    """Validate that an environment variable's value is all lowercase.
 
     Args:
-        env_var_name: The name of the environment variable (e.g., 'GCS_RAW_BUCKET').
+        env_var_name: Name of the environment variable to check.
 
     Returns:
-        The validated, lowercase bucket name (string).
+        The validated lowercase value.
 
     Raises:
-        ValueError: If the environment variable is not set.
-        ValueError: If the content of the environment variable is not all lowercase.
+        ValueError: If env var is not set or value contains uppercase.
     """
     if env_var_name is None:
         # Error case: Variable not defined

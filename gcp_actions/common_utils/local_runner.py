@@ -1,3 +1,10 @@
+"""
+Environment detection and .env loading for local vs Cloud Run execution.
+
+Detects Cloud Run via K_REVISION, loads .env/keys.env from project root
+for local development, and provides the application identifier.
+"""
+
 import os
 import sys
 import logging
@@ -14,11 +21,9 @@ CLOUD_RUN_REVISION_VAR = 'K_REVISION'
 CRITICAL_LOCAL_VAR = 'GCP_PROJECT_ID' # A key variable expected to be in the .env file
 DEFAULT_APP_ID = 'local-dev-mode'
 
+
 def _find_env_file_path() -> str | None:
-    """
-    Manually searches for 'keys.env' or '.env' by walking up the directory tree
-    from the main script's location. This is a robust way to find the project root.
-    """
+    """Search upward from script location for keys.env or .env file."""
     try:
         # Start searching from the directory of the script that was executed.
         current_dir = Path(sys.argv[0]).resolve().parent
@@ -42,12 +47,10 @@ def _find_env_file_path() -> str | None:
 
 @lru_cache(maxsize=1)
 def check_cloud_or_local_run() -> str:
-    """
-    Determines the execution environment (Cloud Run or Local).
+    """Detect execution environment and load local .env if needed.
 
-    - In Cloud Run, it returns the service ID.
-    - Locally, it ensures environment variables are loaded by searching
-      upwards from the main script's path for a 'keys.env' or '.env' file.
+    Returns:
+        Service ID in Cloud Run, or 'local-dev-mode' locally.
     """
     # 1. Primary Check: Cloud Run Environment
     if os.environ.get(CLOUD_RUN_REVISION_VAR):

@@ -1,3 +1,10 @@
+"""
+Configuration loader merging Firestore, Secret Manager, and local overrides.
+
+Precedence (highest to lowest): local_config.json > Secret Manager > Firestore.
+Loads secret names from local config first, then fetches actual secret values.
+"""
+
 import os
 import itertools
 import json
@@ -11,12 +18,10 @@ from gcp_actions.common_utils.timer import run_timer
 import logging
 logger = logging.getLogger(__name__)
 
+
 @run_timer
 def _find_project_root() -> Path | None:
-    """
-    Robustly finds the project root by searching upwards for a marker file/dir.
-    Here, we use '.git' as the marker for the project root.
-    """
+    """Find project root by searching upward for .git directory."""
     try:
         current_dir = Path(sys.argv[0]).resolve().parent
     except (IndexError, AttributeError):
@@ -31,7 +36,7 @@ def _find_project_root() -> Path | None:
     return None
 
 def _load_local_config() -> dict:
-    """Read the project's local_config.json (local equivalent of Cloud Run env vars)."""
+    """Load local_config.json from project root if it exists."""
     project_root = _find_project_root()
     if not project_root:
         return {}
@@ -46,12 +51,21 @@ def _load_local_config() -> dict:
         return {}
 
 class InjectConfig:
-    def __init__(self,
+    """Load and merge config from Firestore, Secret Manager, and local overrides."""
+
+    def __init__(
+            self,
             list_of_secret_env_vars: list = None,
             list_of_sa_env_vars: list = None,
             from_firestore: bool = True
-    ) -> dict[Any, Any] | None:
+    ) -> None:
+        """Initialize config loader with secret sources and project ID resolution.
 
+        Args:
+            list_of_secret_env_vars: Env var names holding Secret Manager secret IDs.
+            list_of_sa_env_vars: Corresponding service accounts for secret access.
+            from_firestore: Whether to load base config from Firestore.
+        """
         self.list_of_secret_env_vars = list_of_secret_env_vars
         self.list_of_sa_env_vars = list_of_sa_env_vars
         self.from_firestore = from_firestore
@@ -76,11 +90,8 @@ class InjectConfig:
             )
         logger.debug(f"Starting initial configuration load for project: {self.project_id}")
 
-    def _inject_firestore(self):
-        """
-        Load base config from the Firestore
-        :return: firestore_config
-        """
+    def _inject_firestore(self) -> dict:
+        """Load base configuration from Firestore config/local/settings/data."""
         firestore_config = {}
         if self.from_firestore:
             fs = FirestoreMagic("config", "local/settings/data")
@@ -92,7 +103,8 @@ class InjectConfig:
             return {}
 
 
-    def add_local_variables(self, merged_config=None):
+    def add_local_variables(self, merged_config: dict | None = None) -> dict:
+        """Merge local_config.json overrides into the config dict."""
         if merged_config is None:
             merged_config = {}
         local_overrides = _load_local_config()
@@ -101,9 +113,10 @@ class InjectConfig:
             logger.warning(f"✅ Applied {len(local_overrides)} overrides from 'local_config.json'.")
         else:
             logger.info("No local override file found. Using production/default config.")
+        return merged_config
 
-    def _final_merge(self, merged_config):
-        # 5. Inject the final merged config into the environment
+    def _final_merge(self, merged_config: dict) -> dict:
+        """Inject merged configuration into environment variables."""
         for key, value in merged_config.items():
             os.environ[key] = str(value)
 
@@ -112,14 +125,11 @@ class InjectConfig:
         return merged_config
 
     @run_timer
-    def load_and_inject_config(self):
+    def load_and_inject_config(self) -> dict:
+        """Load and merge config: Firestore -> local -> secrets -> local (final).
 
-        """
-        Loads configuration from Firestore and Secret Manager, then applies local overrides.
-        The order of precedence is: Local Overrides > Secrets > Firestore.
-
-        NOTE: local_config is applied BEFORE secrets so that secret *name* env vars
-        (APP_JSON_KEYS, SEC_DROPBOX, etc.) are available when fetching from Secret Manager.
+        Precedence: local_config.json > Secret Manager > Firestore.
+        Local config applied twice: first for secret names, then for final overrides.
         """
         # 1. Load base config from Firestore
         firestore_config = self._inject_firestore()

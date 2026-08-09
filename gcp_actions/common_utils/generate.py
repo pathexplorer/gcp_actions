@@ -1,3 +1,10 @@
+"""
+Generate signed download URLs for private GCS objects.
+
+Supports custom filenames via Content-Disposition and service account
+impersonation for cross-project access.
+"""
+
 import datetime
 from gcp_actions.blob_manipulation import get_bucket
 from gcp_actions.common_utils.local_runner import check_cloud_or_local_run
@@ -9,21 +16,29 @@ logger = logging.getLogger(__name__)
 
 check_cloud_or_local_run()
 
+
 def g_download_link(
-    bucket_name: str, 
-    blob_name: str, 
+    bucket_name: str,
+    blob_name: str,
     expiration_minutes: int = 60,
     download_filename: str | None = None,
     impersonate_sa: str | None = None
 ) -> str:
-    """
-    Generates a temporary, secure download link for a private file,
-    optionally specifying the download filename and a service account to impersonate.
+    """Generate a V4 signed URL for downloading a private GCS blob.
+
+    Args:
+        bucket_name: Bucket name or environment variable name.
+        blob_name: Full path to the blob in the bucket.
+        expiration_minutes: URL validity period (default: 60).
+        download_filename: Optional filename for Content-Disposition header.
+        impersonate_sa: Service account to impersonate for signing.
+
+    Returns:
+        Signed URL string.
 
     Raises:
-        google_exceptions.NotFound: If the bucket or blob does not exist.
-        google_exceptions.Forbidden: If there are permission issues.
-        Exception: For any other unexpected errors during URL generation.
+        google_exceptions.NotFound: If bucket or blob doesn't exist.
+        google_exceptions.Forbidden: If permissions insufficient.
     """
     logger.debug(f"Attempting to generate signed URL for blob '{blob_name}' in bucket '{bucket_name}'...")
     try:   

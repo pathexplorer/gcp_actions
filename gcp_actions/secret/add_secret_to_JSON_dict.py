@@ -1,3 +1,9 @@
+"""
+Utility to add or update a single key in a JSON secret in Secret Manager.
+
+Fetches the secret, updates the specified key, and writes a new version.
+"""
+
 import os
 
 import logging
@@ -10,20 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 def add_or_update_secret_key(project_id: str, secret_id: str, key: str, value: str) -> bool:
-    """
-    Adds or updates a specific key-value pair in a JSON-based Google Secret Manager secret.
-
-    This function fetches the secret, decodes the JSON, updates the key,
-    and writes the new version back.
+    """Add or update a key-value pair in a JSON secret in Secret Manager.
 
     Args:
-        project_id: The Google Cloud project ID.
-        secret_id: The ID of the secret to update.
-        key: The key within the JSON dictionary to add or update.
-        value: The new value to associate with the key.
+        project_id: GCP project ID.
+        secret_id: Secret Manager secret ID.
+        key: Dictionary key to add or update.
+        value: New value for the key.
 
     Returns:
-        True if the secret was updated successfully, False otherwise.
+        True if successful, False otherwise.
     """
     if not all([project_id, secret_id, key]):
         logger.error("Project ID, Secret ID, and Key are required.")

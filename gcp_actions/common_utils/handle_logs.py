@@ -1,3 +1,10 @@
+"""
+Logging configuration for Cloud Run (JSON) and local (colored) environments.
+
+Auto-detects Cloud Run via K_SERVICE env var and configures appropriate
+formatters and handlers. Silences noisy third-party loggers.
+"""
+
 import logging
 import os
 import sys
@@ -7,10 +14,7 @@ from functools import lru_cache
 
 # --- 1. Formatter for Cloud (JSON) ---
 class CloudJSONFormatter(logging.Formatter):
-    """
-    Formats logs as JSON, so Google Cloud Run can capture them from stdout
-    and parse severity correctly.
-    """
+    """Format log records as JSON for Cloud Run structured logging."""
 
     def format(self, record):
         # Create the dictionary for JSON output
@@ -31,9 +35,7 @@ class CloudJSONFormatter(logging.Formatter):
 
 # --- 2. Formatter for Local (Colors) ---
 class CustomColorFormatter(logging.Formatter):
-    """
-    A custom formatter that applies ANSI colors to log messages based on level.
-    """
+    """Apply ANSI colors to log levels for readable local console output."""
     GREEN = "\033[32m"
     PURPURE = "\033[35m"
     YELLOW = "\033[33m"
@@ -58,12 +60,8 @@ class CustomColorFormatter(logging.Formatter):
 
 
 @lru_cache(maxsize=1)
-def run_handle_logs():
-    """
-    Configures the root logger.
-    - Cloud: Logs JSON to stdout (best practice for Cloud Run).
-    - Local: Logs with colors to console and file.
-    """
+def run_handle_logs() -> None:
+    """Configure root logger for Cloud Run (JSON) or local (colored + file)."""
     # K_SERVICE is a standard env var in Cloud Run
     IS_CLOUD = "K_SERVICE" in os.environ
 
