@@ -429,7 +429,7 @@ Args:
 
 Args:
     data_name: Data to write.
-    merge: None to overwrite, True to merge with existing fields.
+    merge: False to overwrite (default, matches Firestore native default), True to merge with existing fields.
   - **`backup_document`**: Copy current document to a timestamped backup in {collection}_backups/.
   - **`prune_old_backups`**: Delete old backups beyond max_backups, keeping only the most recent.
   - **`update_firejson`**: Update specific fields in the document (creates if missing).

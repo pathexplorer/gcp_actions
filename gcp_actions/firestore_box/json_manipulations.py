@@ -101,15 +101,16 @@ class FirestoreMagic:
         doc_ref.set(data_name)
 
 
-    def set_firejson(self, data_name: dict, merge: bool | None = None):
+    def set_firejson(self, data_name: dict, merge: bool = False):
         """Set document data with optional merge behavior.
 
         Args:
             data_name: Data to write.
-            merge: None to overwrite, True to merge with existing fields.
+            merge: False to overwrite (default, matches Firestore native
+                default), True to merge with existing fields.
         """
         doc_ref = self.client.collection(self.collection_name).document(self.doc_load_name)
-        doc_ref.set(data_name, merge)
+        doc_ref.set(data_name, merge=merge)
 
     def backup_document(self, backup_collection_name: str | None = None):
         """Copy current document to a timestamped backup in {collection}_backups/."""
