@@ -47,8 +47,7 @@ class FirestoreMagic:
             try:
                 self.create_firejson(self.placeholder_full)
                 logger.debug(f"Document '{self.doc_load_name}' not found. Creating new from template")
-                # not sure it needs
-                #return doc_ref.get()
+                return doc_ref.get()
             except Exception as e:
                 logger.warning(f"An error occurred during resource creation: {e}")
                 raise
@@ -68,6 +67,9 @@ class FirestoreMagic:
 
         try:
             doc_snapshot = self._create_resource_if_not_exists(doc_ref)
+            if doc_snapshot is None:
+                logger.debug(f"Document '{self.doc_load_name}' has no snapshot; returning defaults.")
+                return {}
             logger.debug(f"Doc dict {doc_snapshot}")
             doc_dict = doc_snapshot.to_dict()
             return doc_dict
