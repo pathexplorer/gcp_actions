@@ -1,0 +1,54 @@
+# --- CONFIGURATION AND LOGGING ---
+# logging
+*.log
+logs/
+old/
+
+# --- CONFIGURATION FILES ---
+*.yaml
+
+# learning notes    
+learn/
+
+# --- ENVIRONMENT AND BUILD ARTIFACTS ---
+# Python virtual environments
+.venv
+.venv1/
+venv/
+*.env
+
+# Packages in editable mode (`pip install -e .`) 
+*.egg-info/
+
+# Distribution build artifacts
+dist/
+
+# Python compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Testing and Coverage
+.pytest_cache
+.coverage
+htmlcov/
+
+# --- IDE & VERSION CONTROL ---
+# PyCharm specific directories and files
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# VS Code
+.vscode/
+
+
+# Cloud Build artifacts or cache directories
+.gcloud/
+build/
+
+# editable install artifacts
+*.egg-info/
+
